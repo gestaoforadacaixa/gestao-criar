@@ -330,6 +330,40 @@ function DelSheet({ item, onDone, onClose }) {
   );
 }
 
+// ─── CAT CARD ─────────────────────────────────────────────────────────────────────
+function CatCard({ cat, val, total, sorted, RowComp }) {
+  const [open, setOpen] = useState(false);
+  const catItems = sorted.filter(t => t.categoria === cat);
+  return (
+    <div style={{ background: "#fff", borderRadius: 14, marginBottom: 10, overflow: "hidden", border: "1px solid #D5E8F5", boxShadow: "0 2px 8px rgba(41,128,185,0.07)" }}>
+      <div onClick={() => setOpen(o => !o)} style={{ padding: "14px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ width: 10, height: 10, borderRadius: "50%", background: CAT_COR[cat] || "#999" }} />
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: "#1A5276" }}>{cat}</div>
+            <div style={{ fontSize: 11, color: "#A9B7C6", marginTop: 1 }}>{catItems.filter(t => !t.excluido).length} lançamentos</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: "#1A5276" }}>{fmt(val)}</div>
+          <div style={{ color: "#A9B7C6", transition: "transform .2s", transform: open ? "rotate(180deg)" : "none" }}>▾</div>
+        </div>
+      </div>
+      {open && (
+        <div style={{ borderTop: "1px solid #EBF5FB", padding: "0 16px" }}>
+          <div style={{ padding: "8px 0 4px" }}>
+            <div style={{ background: "#E8F4FD", borderRadius: 4, height: 5, overflow: "hidden" }}>
+              <div style={{ width: `${total > 0 ? (val / total) * 100 : 0}%`, background: CAT_COR[cat] || "#999", height: "100%", borderRadius: 4 }} />
+            </div>
+            <div style={{ fontSize: 10, color: "#A9B7C6", marginTop: 4 }}>{total > 0 ? ((val / total) * 100).toFixed(1) : 0}% do total</div>
+          </div>
+          {catItems.map(t => <RowComp key={t.id} t={t} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── APP ─────────────────────────────────────────────────────────────────────────
 export default function AppCriar() {
   const [mesIdx,    setMesIdx]    = useState(0);
@@ -714,36 +748,9 @@ export default function AppCriar() {
             {byCat.length === 0 ? (
               <div style={{ textAlign: "center", padding: "40px 0", color: "#A9B7C6", fontSize: 14 }}>Nenhum lançamento neste mês.</div>
             ) : (
-              byCat.map(({ cat, val }) => {
-                const [open, setOpen] = useState(false);
-                const catItems = sorted.filter(t => t.categoria === cat);
-                return (
-                  <div key={cat} style={{ background: "#fff", borderRadius: 14, marginBottom: 10, overflow: "hidden", border: "1px solid #D5E8F5", boxShadow: "0 2px 8px rgba(41,128,185,0.07)" }}>
-                    <div onClick={() => setOpen(o => !o)} style={{ padding: "14px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <div style={{ width: 10, height: 10, borderRadius: "50%", background: CAT_COR[cat] || "#999" }} />
-                        <div>
-                          <div style={{ fontSize: 14, fontWeight: 800, color: "#1A5276" }}>{cat}</div>
-                          <div style={{ fontSize: 11, color: "#A9B7C6", marginTop: 1 }}>{catItems.filter(t => !t.excluido).length} lançamentos</div>
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div style={{ fontSize: 15, fontWeight: 800, color: "#1A5276" }}>{fmt(val)}</div>
-                        <div style={{ color: "#A9B7C6", transition: "transform .2s", transform: open ? "rotate(180deg)" : "none" }}>▾</div>
-                      </div>
-                    </div>
-                    {open && (
-                      <div style={{ borderTop: "1px solid #EBF5FB", padding: "0 16px" }}>
-                        <div style={{ padding: "8px 0 4px" }}>
-                          <Bar p={total > 0 ? (val / total) * 100 : 0} color={CAT_COR[cat] || "#999"} />
-                          <div style={{ fontSize: 10, color: "#A9B7C6", marginTop: 4 }}>{total > 0 ? ((val / total) * 100).toFixed(1) : 0}% do total</div>
-                        </div>
-                        {catItems.map(t => <Row key={t.id} t={t} />)}
-                      </div>
-                    )}
-                  </div>
-                );
-              })
+              byCat.map(({ cat, val }) => (
+                <CatCard key={cat} cat={cat} val={val} total={total} sorted={sorted} RowComp={Row} />
+              ))
             )}
           </>
         )}
