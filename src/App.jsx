@@ -56,12 +56,21 @@ const CATEGORIAS = [
 
 const MEIOS = ["Crédito", "Débito", "Dinheiro", "Pix", "Transferência"];
 
-const MESES = ["2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09"];
-const ML = {
-  "2026-04": "Abril 2026",    "2026-05": "Maio 2026",
-  "2026-06": "Junho 2026",    "2026-07": "Julho 2026",
-  "2026-08": "Agosto 2026",   "2026-09": "Setembro 2026",
-};
+// Gera meses dinamicamente: 3 meses antes até 3 depois do mês atual
+const NOMES_MES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+function gerarMeses() {
+  const arr = [];
+  const labels = {};
+  const hj = new Date();
+  for (let i = -3; i <= 3; i++) {
+    const d = new Date(hj.getFullYear(), hj.getMonth() + i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    arr.push(key);
+    labels[key] = `${NOMES_MES[d.getMonth()]} ${d.getFullYear()}`;
+  }
+  return { arr, labels, idxAtual: 3 };
+}
+const { arr: MESES, labels: ML, idxAtual: IDX_ATUAL } = gerarMeses();
 
 const CAT_COR = {
   "Administrativo":   "#E67E22",
@@ -366,7 +375,7 @@ function CatCard({ cat, val, total, sorted, RowComp }) {
 
 // ─── APP ─────────────────────────────────────────────────────────────────────────
 export default function AppCriar() {
-  const [mesIdx,    setMesIdx]    = useState(0);
+  const [mesIdx,    setMesIdx]    = useState(IDX_ATUAL);
   const [items,     setItems]     = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [view,      setView]      = useState("inicio");
@@ -395,9 +404,11 @@ export default function AppCriar() {
 
   useEffect(() => { setItems([]); load(); loadPrev(); }, [mes]);
   useEffect(() => {
+    // Não recarrega enquanto algum modal estiver aberto
+    if (showForm || del || editItem || showPend) return;
     const t = setInterval(() => load(true), 5000);
     return () => clearInterval(t);
-  }, [mes]);
+  }, [mes, showForm, del, editItem, showPend]);
 
   const showToast = m => { setToast(m); setTimeout(() => setToast(null), 2500); };
 
