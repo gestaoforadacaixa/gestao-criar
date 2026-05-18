@@ -196,7 +196,7 @@ function FormSheet({ mes, onSaved, onClose }) {
     const item = {
       id:              uid(),
       cliente_id:      CID,
-      mes,
+      mes:             data.slice(0, 7),
       centro:          "empresa",
       categoria:       cat,
       descricao:       desc.trim(),
