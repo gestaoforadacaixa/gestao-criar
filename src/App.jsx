@@ -304,25 +304,44 @@ function FormSheet({ mes, onSaved, onClose }) {
         {/* Quantidade de repetições */}
         {rec && (
           <div style={{ background: "#EBF5FB", border: "1px solid #AED6F1", borderRadius: 10, padding: "14px", marginBottom: 20 }}>
-            <label style={LBL}>Repetir por quantos meses?</label>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {[2, 3, 4, 6, 12].map(n => (
-                <div key={n}
-                  onClick={() => setReps(n)}
-                  style={{
-                    flex: "1 1 auto", minWidth: 44, textAlign: "center", cursor: "pointer",
-                    padding: "10px 8px", borderRadius: 8, fontWeight: 800, fontSize: 13,
-                    border: reps === n ? "2px solid #2980B9" : "2px solid #D5E8F5",
-                    background: reps === n ? "#2980B9" : "#fff",
-                    color: reps === n ? "#fff" : "#A9B7C6",
-                    transition: "all .15s",
-                  }}>
-                  {n}x
-                </div>
-              ))}
+            <label style={LBL}>Quantas vezes repetir? (1 a 24)</label>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div
+                onClick={() => setReps(r => Math.max(1, r - 1))}
+                style={{
+                  width: 44, height: 44, borderRadius: 10, cursor: "pointer",
+                  border: "2px solid #D5E8F5", background: "#fff", color: "#2980B9",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 22, fontWeight: 800, userSelect: "none", flexShrink: 0,
+                }}>−</div>
+              <input
+                type="number" inputMode="numeric" min="1" max="24"
+                value={reps}
+                onChange={e => {
+                  let n = parseInt(e.target.value) || 1;
+                  if (n < 1) n = 1;
+                  if (n > 24) n = 24;
+                  setReps(n);
+                }}
+                style={{
+                  flex: 1, textAlign: "center", border: "2px solid #D5E8F5",
+                  borderRadius: 10, padding: "11px", fontSize: 22, fontWeight: 900,
+                  color: "#1A5276", outline: "none", background: "#fff",
+                  MozAppearance: "textfield", appearance: "textfield",
+                }} />
+              <div
+                onClick={() => setReps(r => Math.min(24, r + 1))}
+                style={{
+                  width: 44, height: 44, borderRadius: 10, cursor: "pointer",
+                  border: "2px solid #D5E8F5", background: "#fff", color: "#2980B9",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 22, fontWeight: 800, userSelect: "none", flexShrink: 0,
+                }}>+</div>
             </div>
             <div style={{ fontSize: 11, color: "#2980B9", marginTop: 10, fontWeight: 700 }}>
-              Será lançado este mês + {reps - 1} mês(es) seguinte(s)
+              {reps === 1
+                ? "Será lançado apenas este mês"
+                : `Será lançado este mês + ${reps - 1} mês(es) seguinte(s)`}
             </div>
           </div>
         )}
