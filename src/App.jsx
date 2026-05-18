@@ -171,6 +171,7 @@ function FormSheet({ mes, onSaved, onClose }) {
   const [data, setData] = useState(mes + "-" + new Date().toISOString().slice(8, 10));
   const [obs,  setObs]  = useState("");
   const [rec,  setRec]  = useState(false);
+  const [reps, setReps] = useState(3);
   const [err,  setErr]  = useState({});
   const [busy, setBusy] = useState(false);
 
@@ -209,6 +210,18 @@ function FormSheet({ mes, onSaved, onClose }) {
       motivo_exclusao: "",
     };
     const res = await sbPost(item);
+    if (res && rec && reps > 1) {
+      const [ano, mesN, dia] = data.split("-").map(Number);
+      for (let i = 1; i < reps; i++) {
+        const d = new Date(ano, mesN - 1 + i, dia);
+        const novaData = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        await sbPost({
+          id: uid(), cliente_id: CID, mes: novaData.slice(0, 7),
+          centro: "empresa", categoria: cat, descricao: desc.trim(), valor: v,
+          meio, data: novaData, obs, excluido: false, recorrente: true, motivo_exclusao: "",
+        });
+      }
+    }
     setBusy(false);
     if (res) { onSaved(); onClose(); }
     else setErr({ geral: "Erro ao salvar. Verifique a conexão." });
@@ -276,10 +289,10 @@ function FormSheet({ mes, onSaved, onClose }) {
         </div>
 
         {/* Recorrente */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderTop: "1px solid #EBF5FB", marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderTop: "1px solid #EBF5FB", marginBottom: rec ? 12 : 20 }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 800, color: "#1A5276" }}>Despesa Recorrente</div>
-            <div style={{ fontSize: 11, color: "#A9B7C6", marginTop: 1 }}>Repete mensalmente</div>
+            <div style={{ fontSize: 11, color: "#A9B7C6", marginTop: 1 }}>Repete nos próximos meses</div>
           </div>
           <div
             style={{ width: 44, height: 24, borderRadius: 12, cursor: "pointer", background: rec ? "#2980B9" : "#D5E8F5", display: "flex", alignItems: "center", padding: 2, transition: "background .2s", flexShrink: 0 }}
@@ -287,6 +300,32 @@ function FormSheet({ mes, onSaved, onClose }) {
             <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.15)", transition: "transform .2s", transform: rec ? "translateX(20px)" : "none" }} />
           </div>
         </div>
+
+        {/* Quantidade de repetições */}
+        {rec && (
+          <div style={{ background: "#EBF5FB", border: "1px solid #AED6F1", borderRadius: 10, padding: "14px", marginBottom: 20 }}>
+            <label style={LBL}>Repetir por quantos meses?</label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {[2, 3, 4, 6, 12].map(n => (
+                <div key={n}
+                  onClick={() => setReps(n)}
+                  style={{
+                    flex: "1 1 auto", minWidth: 44, textAlign: "center", cursor: "pointer",
+                    padding: "10px 8px", borderRadius: 8, fontWeight: 800, fontSize: 13,
+                    border: reps === n ? "2px solid #2980B9" : "2px solid #D5E8F5",
+                    background: reps === n ? "#2980B9" : "#fff",
+                    color: reps === n ? "#fff" : "#A9B7C6",
+                    transition: "all .15s",
+                  }}>
+                  {n}x
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: "#2980B9", marginTop: 10, fontWeight: 700 }}>
+              Será lançado este mês + {reps - 1} mês(es) seguinte(s)
+            </div>
+          </div>
+        )}
 
         <button className="btn btn-main" onClick={salvar} disabled={busy}>
           {busy ? <><span className="spin" /> Salvando…</> : "✓ Registrar Lançamento"}
