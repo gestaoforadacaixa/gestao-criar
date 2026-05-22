@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 
 // ─── SUPABASE ─────────────────────────────────────────────────────────────────────
 const SUPA_URL = "https://oltwaosdzgvbbvermilk.supabase.co";
@@ -439,6 +439,335 @@ function CatCard({ cat, val, total, sorted, RowComp }) {
   );
 }
 
+
+// ─── CAIXA — LANÇAMENTO SEMANAL DE RECEITA ───────────────────────────────────────
+// Helpers da semana (Seg-Dom)
+function segDaSemanaCriar(dataStr) {
+  const d = new Date(dataStr + "T12:00:00");
+  const dow = d.getDay();
+  const seg = new Date(d);
+  seg.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
+  return seg.toISOString().slice(0, 10);
+}
+function domDaSemanaCriar(segStr) {
+  const d = new Date(segStr + "T12:00:00");
+  d.setDate(d.getDate() + 6);
+  return d.toISOString().slice(0, 10);
+}
+function labelSemana(segStr) {
+  const ini = new Date(segStr + "T12:00:00");
+  const fim = new Date(segStr + "T12:00:00");
+  fim.setDate(ini.getDate() + 6);
+  return `${ini.getDate()}/${ini.getMonth() + 1} a ${fim.getDate()}/${fim.getMonth() + 1}`;
+}
+
+// API receitas
+async function rcGet(mes) {
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/receitas?cliente_id=eq.${CID}&mes=eq.${mes}&order=semana.desc`, { headers: H });
+    return r.ok ? r.json() : [];
+  } catch { return []; }
+}
+async function rcPost(body) {
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/receitas`, { method: "POST", headers: H, body: JSON.stringify(body) });
+    return r.ok ? r.json() : null;
+  } catch { return null; }
+}
+async function rcPatch(id, body) {
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/receitas?id=eq.${id}`, { method: "PATCH", headers: { ...H, "Prefer": "return=minimal" }, body: JSON.stringify(body) });
+    return r.ok;
+  } catch { return false; }
+}
+async function rcDelete(id) {
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/receitas?id=eq.${id}`, { method: "DELETE", headers: H });
+    return r.ok;
+  } catch { return false; }
+}
+
+// Formulário de receita semanal
+function ReceitaForm({ mes, receita, onSaved, onClose }) {
+  const isEdit = !!receita;
+  const hoje = new Date().toISOString().slice(0, 10);
+  const [valor, setValor] = useState(isEdit ? String(receita.valor).replace(".", ",") : "");
+  const [semana, setSemana] = useState(isEdit ? receita.semana : segDaSemanaCriar(hoje));
+  const [obs, setObs] = useState(isEdit ? receita.obs || "" : "");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState({});
+
+  async function salvar() {
+    const v = parseFloat(valor.replace(",", "."));
+    const e = {};
+    if (!v || v <= 0) e.valor = true;
+    if (!semana) e.semana = true;
+    if (Object.keys(e).length) { setErr(e); return; }
+
+    setBusy(true);
+    const segReal = segDaSemanaCriar(semana);
+    const mesRef = segReal.slice(0, 7);
+    const payload = {
+      cliente_id: CID,
+      mes: mesRef,
+      semana: segReal,
+      valor: v,
+      obs: obs.trim(),
+      data_lancamento: hoje,
+    };
+    let ok;
+    if (isEdit) ok = await rcPatch(receita.id, payload);
+    else { payload.id = uid(); ok = await rcPost(payload); }
+    setBusy(false);
+    if (ok) { onSaved(); onClose(); }
+    else setErr({ geral: "Erro ao salvar." });
+  }
+
+  const LBL = { fontSize: 10, color: "#777", letterSpacing: ".12em", textTransform: "uppercase", fontWeight: 700, display: "block", marginBottom: 7 };
+
+  return (
+    <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="sheet">
+        <div className="handle" />
+        <div style={{ fontSize: 22, fontWeight: 900, color: "#1A5276", letterSpacing: ".04em", marginBottom: 4 }}>
+          {isEdit ? "Editar Receita" : "Nova Receita Semanal"}
+        </div>
+        <div style={{ fontSize: 12, color: "#888", marginBottom: 20 }}>Lance o total recebido na conta durante a semana</div>
+
+        {err.geral && <div style={{ background: "#FFF0F0", border: "1px solid #FFCCCC", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#CC0000", marginBottom: 14, fontWeight: 600 }}>{err.geral}</div>}
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={LBL}>Valor recebido na semana (R$) *</label>
+          <input
+            className={`inp${err.valor ? " inp-err" : ""}`}
+            type="number" inputMode="decimal" placeholder="0,00"
+            value={valor}
+            onChange={e => { setValor(e.target.value); setErr(x => ({ ...x, valor: false })); }}
+            style={{ fontSize: 22, fontWeight: 800, color: "#27AE60" }} />
+          {err.valor && <div style={{ fontSize: 11, color: "#CC0000", marginTop: 4, fontWeight: 600 }}>Informe um valor válido</div>}
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <label style={LBL}>Semana de referência *</label>
+          <input
+            className={`inp${err.semana ? " inp-err" : ""}`}
+            type="date" value={semana}
+            onChange={e => { setSemana(e.target.value); setErr(x => ({ ...x, semana: false })); }} />
+          <div style={{ fontSize: 11, color: "#2980B9", marginTop: 6, fontWeight: 600 }}>
+            📅 Semana: {labelSemana(segDaSemanaCriar(semana))}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <label style={LBL}>Observação</label>
+          <textarea className="inp" style={{ minHeight: 56, resize: "none", fontSize: 13 }} placeholder="Opcional" value={obs} onChange={e => setObs(e.target.value)} />
+        </div>
+
+        <button className="btn btn-main" style={{ background: "#2980B9", color: "#fff" }} onClick={salvar} disabled={busy}>
+          {busy ? <><span className="spin" /> Salvando</> : (isEdit ? "Salvar Alterações" : "Registrar Receita")}
+        </button>
+        <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+// Modal de exclusão
+function DelReceitaSheet({ receita, onDone, onClose }) {
+  const [busy, setBusy] = useState(false);
+  async function confirmar() {
+    setBusy(true);
+    const ok = await rcDelete(receita.id);
+    setBusy(false);
+    if (ok) { onDone(); onClose(); }
+  }
+  return (
+    <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="sheet">
+        <div className="handle" />
+        <div style={{ fontSize: 20, fontWeight: 900, color: "#CC0000", marginBottom: 8 }}>Excluir Receita</div>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>{fmt(receita.valor)}</div>
+        <div style={{ fontSize: 13, color: "#888", marginBottom: 18 }}>Semana: {labelSemana(receita.semana)}</div>
+        <div style={{ background: "#FFF8F8", border: "1px solid #FFCCCC", borderRadius: 10, padding: "12px 14px", marginBottom: 18, fontSize: 13, color: "#CC0000", fontWeight: 600 }}>Esta ação não pode ser desfeita.</div>
+        <button className="btn" style={{ background: "#CC0000", color: "#fff", border: "none" }} onClick={confirmar} disabled={busy}>{busy ? <><span className="spin" /> Excluindo</> : "Confirmar Exclusão"}</button>
+        <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+// View principal da Caixa
+function CaixaView({ mes, despesasEmpresa }) {
+  const [subView, setSubView] = useState("lancar");
+  const [receitas, setReceitas] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editReceita, setEditReceita] = useState(null);
+  const [delReceita, setDelReceita] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const d = await rcGet(mes);
+    setReceitas(d || []);
+    setLoading(false);
+  }, [mes]);
+
+  useEffect(() => { setReceitas([]); load(); }, [load]);
+  useEffect(() => {
+    if (showForm || editReceita || delReceita) return;
+    const t = setInterval(() => { rcGet(mes).then(d => setReceitas(d || [])); }, 5000);
+    return () => clearInterval(t);
+  }, [mes, showForm, editReceita, delReceita]);
+
+  const totalReceita = receitas.reduce((s, r) => s + r.valor, 0);
+  const totalDespesa = despesasEmpresa.reduce((s, d) => s + d.valor, 0);
+  const lucro = totalReceita - totalDespesa;
+  const margem = totalReceita > 0 ? (lucro / totalReceita) * 100 : 0;
+
+  return (
+    <div>
+      {/* Sub-tabs */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        {[["lancar", "Lançar"], ["receitas", "Receitas"], ["resultado", "Resultado"]].map(([v, l]) => (
+          <button key={v} onClick={() => setSubView(v)}
+            style={{
+              flex: 1, border: "none", borderRadius: 8, padding: "9px 4px", fontSize: 12,
+              fontWeight: 700, cursor: "pointer", transition: "all .18s",
+              background: subView === v ? "#2980B9" : "#fff",
+              color: subView === v ? "#fff" : "#888",
+              boxShadow: subView === v ? "0 2px 8px rgba(41,128,185,.3)" : "0 1px 3px rgba(0,0,0,.06)",
+            }}>{l}</button>
+        ))}
+      </div>
+
+      {loading && <div style={{ textAlign: "center", padding: 40 }}><span className="spin" /></div>}
+
+      {/* LANÇAR */}
+      {subView === "lancar" && !loading && (
+        <>
+          <div style={{ background: "#fff", borderRadius: 14, padding: "22px 20px", marginBottom: 16, boxShadow: "0 2px 12px rgba(41,128,185,0.08)", borderLeft: "4px solid #27AE60" }}>
+            <div style={{ fontSize: 10, color: "#A9B7C6", letterSpacing: ".18em", textTransform: "uppercase", marginBottom: 4, fontWeight: 600 }}>Total Receitas — {ML[mes]}</div>
+            <div style={{ fontSize: 36, fontWeight: 900, color: "#1E8449", lineHeight: 1, marginBottom: 6 }}>{fmt(totalReceita)}</div>
+            <div style={{ fontSize: 12, color: "#A9B7C6", letterSpacing: ".08em", textTransform: "uppercase" }}>{receitas.length} semana(s) lançada(s)</div>
+          </div>
+
+          <button onClick={() => setShowForm(true)}
+            style={{ width: "100%", background: "#27AE60", color: "#fff", border: "none", borderRadius: 12, padding: "16px 20px", fontSize: 14, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", cursor: "pointer", boxShadow: "0 4px 14px rgba(39,174,96,0.3)", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 18 }}>
+            <span style={{ fontSize: 22, lineHeight: 1 }}>+</span> Nova Receita Semanal
+          </button>
+
+          {receitas.length > 0 && (
+            <>
+              <div style={{ fontSize: 10, color: "#A9B7C6", letterSpacing: ".18em", textTransform: "uppercase", marginBottom: 10, fontWeight: 600 }}>Últimos lançamentos</div>
+              <div style={{ background: "#fff", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 6px rgba(0,0,0,.05)" }}>
+                {receitas.slice(0, 5).map((r, i) => (
+                  <div key={r.id} style={{ padding: "12px 16px", borderBottom: i < Math.min(receitas.length, 5) - 1 ? "1px solid #F0F0F0" : "none", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: "#1A5276" }}>{labelSemana(r.semana)}</div>
+                      {r.obs && <div style={{ fontSize: 11, color: "#888", marginTop: 2, fontStyle: "italic" }}>{r.obs}</div>}
+                    </div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: "#1E8449" }}>{fmt(r.valor)}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {receitas.length === 0 && (
+            <div style={{ background: "#fff", borderRadius: 12, padding: "32px 20px", textAlign: "center", boxShadow: "0 1px 6px rgba(0,0,0,.06)" }}>
+              <div style={{ fontSize: 32, marginBottom: 10 }}>💰</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#1A5276", marginBottom: 6 }}>Nenhuma receita lançada</div>
+              <div style={{ fontSize: 13, color: "#888", lineHeight: 1.5 }}>Toque em "Nova Receita Semanal" para começar.</div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* RECEITAS — lista completa */}
+      {subView === "receitas" && !loading && (
+        <>
+          <div style={{ fontSize: 10, color: "#A9B7C6", letterSpacing: ".18em", textTransform: "uppercase", marginBottom: 14, fontWeight: 600 }}>{receitas.length} receita(s) — {fmt(totalReceita)}</div>
+          {receitas.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "40px 0", color: "#CCC", fontSize: 14 }}>Nenhuma receita lançada neste mês.</div>
+          ) : (
+            <div style={{ background: "#fff", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 6px rgba(0,0,0,.05)" }}>
+              {receitas.map((r, i) => (
+                <div key={r.id} style={{ padding: "14px 16px", borderBottom: i < receitas.length - 1 ? "1px solid #F0F0F0" : "none", display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ width: 4, height: 32, background: "#27AE60", borderRadius: 2, flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#1A5276" }}>{labelSemana(r.semana)}</div>
+                    {r.obs && <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>{r.obs}</div>}
+                  </div>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: "#1E8449" }}>{fmt(r.valor)}</div>
+                  <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                    <button onClick={() => setEditReceita(r)} title="Editar"
+                      style={{ background: "none", border: "1px solid #EEE", borderRadius: 6, width: 28, height: 28, cursor: "pointer", color: "#888", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>✎</button>
+                    <button onClick={() => setDelReceita(r)} title="Excluir"
+                      style={{ background: "none", border: "1px solid #EEE", borderRadius: 6, width: 28, height: 28, cursor: "pointer", color: "#888", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* RESULTADO */}
+      {subView === "resultado" && !loading && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+            <div style={{ background: "#fff", borderRadius: 14, padding: "16px", boxShadow: "0 1px 6px rgba(0,0,0,.06)", borderLeft: "4px solid #27AE60" }}>
+              <div style={{ fontSize: 9, color: "#A9B7C6", letterSpacing: ".18em", textTransform: "uppercase", fontWeight: 600, marginBottom: 4 }}>Receita</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: "#1E8449", lineHeight: 1 }}>{fmt(totalReceita)}</div>
+              <div style={{ fontSize: 11, color: "#AAA", marginTop: 4 }}>{receitas.length} semana(s)</div>
+            </div>
+            <div style={{ background: "#fff", borderRadius: 14, padding: "16px", boxShadow: "0 1px 6px rgba(0,0,0,.06)", borderLeft: "4px solid #CC0000" }}>
+              <div style={{ fontSize: 9, color: "#A9B7C6", letterSpacing: ".18em", textTransform: "uppercase", fontWeight: 600, marginBottom: 4 }}>Despesas</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: "#CC0000", lineHeight: 1 }}>{fmt(totalDespesa)}</div>
+              <div style={{ fontSize: 11, color: "#AAA", marginTop: 4 }}>{despesasEmpresa.length} lançamento(s)</div>
+            </div>
+          </div>
+
+          <div style={{ background: lucro >= 0 ? "#F0FFF8" : "#FFF5F5", borderRadius: 16, padding: "22px 20px", marginBottom: 14, border: `2px solid ${lucro >= 0 ? "#27AE60" : "#CC0000"}33` }}>
+            <div style={{ fontSize: 10, color: lucro >= 0 ? "#27AE60" : "#CC0000", letterSpacing: ".18em", textTransform: "uppercase", marginBottom: 6, fontWeight: 700 }}>{lucro >= 0 ? "Lucro do Mês" : "Prejuízo do Mês"}</div>
+            <div style={{ fontSize: 36, fontWeight: 900, color: lucro >= 0 ? "#1E8449" : "#CC0000", lineHeight: 1, marginBottom: 8 }}>{lucro >= 0 ? "+ " : "- "}{fmt(Math.abs(lucro))}</div>
+            <div style={{ fontSize: 12, color: "#888" }}>{fmt(totalReceita)} − {fmt(totalDespesa)} {totalReceita > 0 && `· Margem ${margem.toFixed(1)}%`}</div>
+          </div>
+
+          {totalReceita > 0 && (
+            <div style={{ background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 1px 6px rgba(0,0,0,.05)" }}>
+              <div style={{ fontSize: 11, color: "#A9B7C6", letterSpacing: ".12em", textTransform: "uppercase", fontWeight: 700, marginBottom: 12 }}>Composição</div>
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, color: "#27AE60", fontWeight: 700 }}>Receita</span>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: "#1E8449" }}>{fmt(totalReceita)}</span>
+                </div>
+                <div style={{ height: 8, borderRadius: 4, background: "#F0F0F0", overflow: "hidden" }}>
+                  <div style={{ width: "100%", height: "100%", background: "#27AE60", borderRadius: 4 }} />
+                </div>
+              </div>
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, color: "#CC0000", fontWeight: 700 }}>Despesas</span>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: "#CC0000" }}>{fmt(totalDespesa)}</span>
+                </div>
+                <div style={{ height: 8, borderRadius: 4, background: "#F0F0F0", overflow: "hidden" }}>
+                  <div style={{ width: `${Math.min((totalDespesa / totalReceita) * 100, 100)}%`, height: "100%", background: "#CC0000", borderRadius: 4 }} />
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {showForm && <ReceitaForm mes={mes} receita={null} onSaved={load} onClose={() => setShowForm(false)} />}
+      {editReceita && <ReceitaForm mes={mes} receita={editReceita} onSaved={load} onClose={() => setEditReceita(null)} />}
+      {delReceita && <DelReceitaSheet receita={delReceita} onDone={load} onClose={() => setDelReceita(null)} />}
+    </div>
+  );
+}
+
+
 // ─── APP ─────────────────────────────────────────────────────────────────────────
 export default function AppCriar() {
   const [mesIdx,    setMesIdx]    = useState(IDX_ATUAL);
@@ -692,7 +1021,7 @@ export default function AppCriar() {
         </div>
 
         <div style={{ display: "flex", borderBottom: "1px solid #EBF5FB" }}>
-          {[["inicio", "Início"], ["historico", "Histórico"], ["categorias", "Categorias"]].map(([v, l]) => (
+          {[["caixa", "Caixa"], ["inicio", "Início"], ["historico", "Histórico"], ["categorias", "Categorias"]].map(([v, l]) => (
             <button key={v} className={`tab-b${view === v ? " on" : ""}`} onClick={() => setView(v)}>{l}</button>
           ))}
         </div>
@@ -736,6 +1065,9 @@ export default function AppCriar() {
 
       {/* CONTEÚDO */}
       <div style={{ padding: "20px 16px 100px" }}>
+
+        {/* CAIXA */}
+        {view === "caixa" && <CaixaView mes={mes} despesasEmpresa={ativos} />}
 
         {/* INÍCIO */}
         {view === "inicio" && (
@@ -834,7 +1166,7 @@ export default function AppCriar() {
       </div>
 
       {/* FAB */}
-      {!anyModal && !showPend && (
+      {!anyModal && !showPend && view !== "caixa" && (
         <button className="fab" onClick={() => setShowForm(true)}>
           <span style={{ fontSize: 20, lineHeight: 1 }}>+</span> Novo Lançamento
         </button>
