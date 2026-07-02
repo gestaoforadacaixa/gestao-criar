@@ -138,7 +138,7 @@ const JUNHO_DATA = [
   // 15/06 — Extrato bancário
   { id:332, data:"2026-06-15", descricao:"João Carlos Luiz Lima Pri",           categoria:"Serviços",       meio:"Pix",           valor:300.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
   { id:333, data:"2026-06-15", descricao:"Sempre Nutri Mais",                   categoria:"Alimentação",    meio:"Pix",           valor:245.00,  obs:"Extrato Jun/2026",                     recorrente:false },
-  { id:334, data:"2026-06-15", descricao:"CEF Matriz — FGTS",                  categoria:"Administrativo", meio:"Pix",           valor:217.56,  obs:"Extrato Jun/2026",                     recorrente:true  },
+  { id:334, data:"2026-06-15", descricao:"CEF Matriz — FGTS",                  categoria:"Impostos"        , meio:"Pix",           valor:217.56,  obs:"Extrato Jun/2026",                     recorrente:true  },
   { id:335, data:"2026-06-15", descricao:"AES Eletropaulo — Conta de Luz",     categoria:"Infraestrutura", meio:"Débito",         valor:402.63,  obs:"Extrato Jun/2026",                     recorrente:true  },
   { id:336, data:"2026-06-15", descricao:"Centauro Seguradora",                 categoria:"Administrativo", meio:"Pix",           valor:276.66,  obs:"Extrato Jun/2026",                     recorrente:true  },
   { id:337, data:"2026-06-15", descricao:"Hadou Soluções Financeira",           categoria:"Administrativo", meio:"Pix",           valor:189.90,  obs:"Extrato Jun/2026",                     recorrente:false },
@@ -148,9 +148,9 @@ const JUNHO_DATA = [
   { id:340, data:"2026-06-16", descricao:"Katia do Nascimento",                 categoria:"Serviços",       meio:"Pix",           valor:220.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
   // 19/06 — Extrato bancário
   { id:341, data:"2026-06-19", descricao:"IFRACTAL Desenvolvimento",            categoria:"Administrativo", meio:"Pix",           valor:99.60,   obs:"Extrato Jun/2026",                     recorrente:false },
-  { id:342, data:"2026-06-19", descricao:"Receita Federal",                     categoria:"Administrativo", meio:"Pix",           valor:189.48,  obs:"Extrato Jun/2026",                     recorrente:false },
-  { id:343, data:"2026-06-19", descricao:"CEF Matriz — FGTS",                  categoria:"Administrativo", meio:"Pix",           valor:1239.38, obs:"Extrato Jun/2026",                     recorrente:true  },
-  { id:344, data:"2026-06-19", descricao:"DARF Tributos Federais",              categoria:"Administrativo", meio:"Débito",         valor:1057.74, obs:"Extrato Jun/2026",                     recorrente:true  },
+  { id:342, data:"2026-06-19", descricao:"Receita Federal",                     categoria:"Impostos"        , meio:"Pix",           valor:189.48,  obs:"Extrato Jun/2026",                     recorrente:false },
+  { id:343, data:"2026-06-19", descricao:"CEF Matriz — FGTS",                  categoria:"Impostos"        , meio:"Pix",           valor:1239.38, obs:"Extrato Jun/2026",                     recorrente:true  },
+  { id:344, data:"2026-06-19", descricao:"DARF Tributos Federais",              categoria:"Impostos"        , meio:"Débito",         valor:1057.74, obs:"Extrato Jun/2026",                     recorrente:true  },
   { id:345, data:"2026-06-19", descricao:"Cleberson Americo de Mora",           categoria:"Serviços",       meio:"Pix",           valor:300.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
   // 22/06 — Extrato bancário
   { id:346, data:"2026-06-22", descricao:"Bianca Soares Rodrigues",             categoria:"Serviços",       meio:"Pix",           valor:350.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
@@ -158,8 +158,8 @@ const JUNHO_DATA = [
   { id:348, data:"2026-06-22", descricao:"Pix Enviado CRIAR (operacional)",     categoria:"Administrativo", meio:"Transferência", valor:8700.00, obs:"Extrato Jun/2026 — transf. interna",   recorrente:false },
   // 23/06 — Extrato bancário
   { id:349, data:"2026-06-23", descricao:"META QSM Gerenciamento",              categoria:"Administrativo", meio:"Pix",           valor:750.00,  obs:"Extrato Jun/2026",                     recorrente:false },
-  { id:350, data:"2026-06-23", descricao:"DARF Tributos Federais",              categoria:"Administrativo", meio:"Débito",         valor:596.58,  obs:"Extrato Jun/2026",                     recorrente:false },
-  { id:351, data:"2026-06-23", descricao:"Receita Federal",                     categoria:"Administrativo", meio:"Pix",           valor:132.90,  obs:"Extrato Jun/2026",                     recorrente:false },
+  { id:350, data:"2026-06-23", descricao:"DARF Tributos Federais",              categoria:"Impostos"        , meio:"Débito",         valor:596.58,  obs:"Extrato Jun/2026",                     recorrente:false },
+  { id:351, data:"2026-06-23", descricao:"Receita Federal",                     categoria:"Impostos"        , meio:"Pix",           valor:132.90,  obs:"Extrato Jun/2026",                     recorrente:false },
 ].map(t=>({...t, classe:"Empresa", excluido:false, motivoExclusao:""}));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
