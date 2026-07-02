@@ -1,52 +1,8 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 
-// ─── SUPABASE ─────────────────────────────────────────────────────────────────────
-const SUPA_URL = "https://oltwaosdzgvbbvermilk.supabase.co";
-const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9sdHdhb3Nkemd2YmJ2ZXJtaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1NDU3MjksImV4cCI6MjA5NDEyMTcyOX0.WbDR65w6eywTgLc4Lwii_63RrJwKPN9oj1DsgjxeFBo";
-const CID = "criar";
-const H = {
-  "Content-Type": "application/json",
-  "apikey": SUPA_KEY,
-  "Authorization": `Bearer ${SUPA_KEY}`,
-  "Prefer": "return=representation",
-};
-
-const sbGet = async (mes) => {
-  try {
-    const r = await fetch(
-      `${SUPA_URL}/rest/v1/lancamentos?cliente_id=eq.${CID}&mes=eq.${mes}&order=data.desc`,
-      { headers: H }
-    );
-    return r.ok ? r.json() : [];
-  } catch { return []; }
-};
-
-const sbPost = async (body) => {
-  try {
-    const r = await fetch(`${SUPA_URL}/rest/v1/lancamentos`, {
-      method: "POST", headers: H, body: JSON.stringify(body),
-    });
-    return r.ok ? r.json() : null;
-  } catch { return null; }
-};
-
-const sbPatch = async (id, body) => {
-  try {
-    const r = await fetch(`${SUPA_URL}/rest/v1/lancamentos?id=eq.${id}`, {
-      method: "PATCH",
-      headers: { ...H, "Prefer": "return=minimal" },
-      body: JSON.stringify(body),
-    });
-    return r.ok;
-  } catch { return false; }
-};
-
-// ─── CONSTANTES ───────────────────────────────────────────────────────────────────
-// Categorias reais do app CRIAR conforme documento
 const CATEGORIAS = [
   "Administrativo",
   "Alimentação",
-  "Eventos",
   "Impostos",
   "Infraestrutura",
   "Material Didático",
@@ -58,1004 +14,611 @@ const CATEGORIAS = [
   "Transporte",
 ];
 
-const MEIOS = ["Crédito", "Débito", "Dinheiro", "Pix", "Transferência"];
+const MEIOS          = ["Crédito","Débito","Dinheiro","Pix","Transferência"];
+const PERIODICIDADES = ["Mensal","Quinzenal","Semanal"];
+const REPETICOES_OPT = [2,3,4,5,6,12];
+const MESES_NOMES    = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
 
-// Gera meses dinamicamente: 3 meses antes até 3 depois do mês atual
-const NOMES_MES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-function gerarMeses() {
-  const arr = [];
-  const labels = {};
-  const hj = new Date();
-  for (let i = -3; i <= 3; i++) {
-    const d = new Date(hj.getFullYear(), hj.getMonth() + i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    arr.push(key);
-    labels[key] = `${NOMES_MES[d.getMonth()]} ${d.getFullYear()}`;
-  }
-  return { arr, labels, idxAtual: 3 };
-}
-const { arr: MESES, labels: ML, idxAtual: IDX_ATUAL } = gerarMeses();
-
-const CAT_COR = {
+const CAT_CORES = {
   "Administrativo":   "#E67E22",
   "Alimentação":      "#F39C12",
-  "Eventos":          "#C0392B",
-  "Impostos":         "#1ABC9C",
+  "Impostos":         "#7D3C98",
   "Infraestrutura":   "#2980B9",
   "Material Didático":"#8E44AD",
   "Mensalidades":     "#27AE60",
-  "Obra":             "#34495E",
-  "Papelaria":        "#D35400",
+  "Obra":             "#C0392B",
+  "Papelaria":        "#1ABC9C",
   "Salários":         "#E91E8C",
   "Serviços":         "#16A085",
   "Transporte":       "#7F8C8D",
 };
 
-const fmt  = v => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-const hoje = () => new Date().toISOString().slice(0, 10);
-const uid  = () => crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now();
-const fd   = d => { const [, m, day] = d.split("-"); return `${day}/${m}`; };
+const MESES = [
+  { label:"Abril 2026",    mes:"2026-04", fechado:true  },
+  { label:"Maio 2026",     mes:"2026-05", fechado:true  },
+  { label:"Junho 2026",    mes:"2026-06", fechado:false },
+  { label:"Julho 2026",    mes:"2026-07", fechado:false },
+  { label:"Agosto 2026",   mes:"2026-08", fechado:false },
+  { label:"Setembro 2026", mes:"2026-09", fechado:false },
+];
 
-// ─── CSS ──────────────────────────────────────────────────────────────────────────
-const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { background: #F0F6FF; font-family: 'Nunito', sans-serif; color: #1A5276; min-height: 100vh; }
+// ─── ABRIL 2026 ───────────────────────────────────────────────────────────────
+const ABRIL_DATA = [
+  { id:101, data:"2026-04-30", descricao:"Salário — Adriana Gomes Rodrigues",              categoria:"Salários",       meio:"Transferência", valor:1566.97, obs:"Holerite Abr/2026 · Monitora",         recorrente:true  },
+  { id:102, data:"2026-04-30", descricao:"Salário — Amanda de Souza Sabino",               categoria:"Salários",       meio:"Transferência", valor:1402.17, obs:"Holerite Abr/2026 · Ajudante Geral",    recorrente:true  },
+  { id:103, data:"2026-04-30", descricao:"Salário — Angela Santos Borges de Carvalho",     categoria:"Salários",       meio:"Transferência", valor:1578.11, obs:"Holerite Abr/2026 · Educador Infantil", recorrente:true  },
+  { id:104, data:"2026-04-30", descricao:"Salário — Clarice Martins Nunes",                categoria:"Salários",       meio:"Transferência", valor:1412.58, obs:"Holerite Abr/2026 · Educador Infantil", recorrente:true  },
+  { id:105, data:"2026-04-30", descricao:"Salário — Jaqueline Rodrigues de Lima Vieira",   categoria:"Salários",       meio:"Transferência", valor:1402.17, obs:"Holerite Abr/2026 · Monitora",         recorrente:true  },
+  { id:106, data:"2026-04-30", descricao:"Salário — Leila Cristina dos Santos Nascimento", categoria:"Salários",       meio:"Transferência", valor:1402.17, obs:"Holerite Abr/2026 · Monitora",         recorrente:true  },
+  { id:107, data:"2026-04-30", descricao:"Salário — Lidiane Urbano Martins Ribeiro",       categoria:"Salários",       meio:"Transferência", valor:1566.97, obs:"Holerite Abr/2026 · Monitora",         recorrente:true  },
+  { id:108, data:"2026-04-30", descricao:"Salário — Michelle Azevedo",                     categoria:"Salários",       meio:"Transferência", valor:2299.32, obs:"Holerite Abr/2026 · Coord. Pedagógica", recorrente:true  },
+  { id:109, data:"2026-04-30", descricao:"Salário — Tabata Rosa de Oliveira dos Santos",   categoria:"Salários",       meio:"Transferência", valor:1537.25, obs:"Holerite Abr/2026 · Ajudante Geral",    recorrente:true  },
+  { id:110, data:"2026-04-30", descricao:"Pró-labore — Veruska Natalina Preite",           categoria:"Salários",       meio:"Transferência", valor:1780.00, obs:"Holerite Abr/2026 · Administrador",     recorrente:true  },
+  { id:111, data:"2026-04-28", descricao:"Rosemeire Martins de Lima",                      categoria:"Serviços",       meio:"Pix",           valor:300.00,  obs:"Extrato — prestador externo",           recorrente:false },
+  { id:112, data:"2026-04-29", descricao:"Tiago Ferreira Borba",                           categoria:"Serviços",       meio:"Pix",           valor:144.00,  obs:"Extrato — prestador externo",           recorrente:false },
+  { id:113, data:"2026-04-30", descricao:"Thais Lopes de (53 889 162)",                    categoria:"Serviços",       meio:"Pix",           valor:954.00,  obs:"Extrato — prestador externo",           recorrente:false },
+].map(t=>({...t, classe:"Empresa", excluido:false, motivoExclusao:""}));
 
-.inp { width: 100%; border: 2px solid #D5E8F5; border-radius: 10px; padding: 12px 14px; font-size: 15px; font-family: 'Nunito', sans-serif; background: #F8FBFF; color: #1A5276; outline: none; transition: border .18s; -webkit-appearance: none; appearance: none; }
-.inp:focus { border-color: #2980B9; box-shadow: 0 0 0 3px rgba(41,128,185,0.10); }
-.inp::placeholder { color: #BDC3C7; }
-.inp-err { border-color: #E74C3C !important; }
+// ─── MAIO 2026 ────────────────────────────────────────────────────────────────
+const MAIO_DATA = [
+  { id:201, data:"2026-05-08", descricao:"Salário — Adriana Gomes Rodrigues",              categoria:"Salários",       meio:"Transferência", valor:1566.97, obs:"Holerite Mai/2026 · Monitora",         recorrente:true  },
+  { id:202, data:"2026-05-08", descricao:"Salário — Amanda de Souza Sabino",               categoria:"Salários",       meio:"Transferência", valor:1402.17, obs:"Holerite Mai/2026 · Ajudante Geral",    recorrente:true  },
+  { id:203, data:"2026-05-08", descricao:"Salário — Angela Santos Borges de Carvalho",     categoria:"Salários",       meio:"Transferência", valor:1578.11, obs:"Holerite Mai/2026 · Educador Infantil", recorrente:true  },
+  { id:204, data:"2026-05-08", descricao:"Salário — Clarice Martins Nunes",                categoria:"Salários",       meio:"Transferência", valor:1412.58, obs:"Holerite Mai/2026 · Educador Infantil", recorrente:true  },
+  { id:205, data:"2026-05-08", descricao:"Salário — Jaqueline Rodrigues de Lima Vieira",   categoria:"Salários",       meio:"Transferência", valor:1402.17, obs:"Holerite Mai/2026 · Monitora",         recorrente:true  },
+  { id:206, data:"2026-05-08", descricao:"Salário — Leila Cristina dos Santos Nascimento", categoria:"Salários",       meio:"Transferência", valor:1402.17, obs:"Holerite Mai/2026 · Monitora",         recorrente:true  },
+  { id:207, data:"2026-05-08", descricao:"Salário — Lidiane Urbano Martins Ribeiro",       categoria:"Salários",       meio:"Transferência", valor:1566.97, obs:"Holerite Mai/2026 · Monitora",         recorrente:true  },
+  { id:208, data:"2026-05-08", descricao:"Salário — Michelle Azevedo",                     categoria:"Salários",       meio:"Transferência", valor:2299.32, obs:"Holerite Mai/2026 · Coord. Pedagógica", recorrente:true  },
+  { id:209, data:"2026-05-08", descricao:"Salário — Tabata Rosa de Oliveira dos Santos",   categoria:"Salários",       meio:"Transferência", valor:1537.25, obs:"Holerite Mai/2026 · Ajudante Geral",    recorrente:true  },
+  { id:210, data:"2026-05-08", descricao:"Pró-labore — Veruska Natalina Preite",           categoria:"Salários",       meio:"Transferência", valor:1780.00, obs:"Holerite Mai/2026 · Administrador",     recorrente:true  },
+  { id:211, data:"2026-05-11", descricao:"Gabriella Melo Custódio",                        categoria:"Serviços",       meio:"Pix",           valor:900.00,  obs:"Extrato — prestador externo",           recorrente:false },
+  { id:212, data:"2026-05-11", descricao:"Diogenes Ricardo da Silva",                      categoria:"Serviços",       meio:"Pix",           valor:750.00,  obs:"Extrato — prestador externo",           recorrente:false },
+  { id:213, data:"2026-05-11", descricao:"Maria Eugenia T. Gonzalez",                      categoria:"Serviços",       meio:"Pix",           valor:1200.00, obs:"Extrato — prestador externo",           recorrente:false },
+  { id:214, data:"2026-05-11", descricao:"Vanessa Preite",                                 categoria:"Serviços",       meio:"Pix",           valor:1987.00, obs:"Extrato — prestador externo",           recorrente:false },
+  { id:215, data:"2026-05-11", descricao:"Vanessa Preite (2ª parcela)",                    categoria:"Serviços",       meio:"Pix",           valor:265.00,  obs:"Extrato — prestador externo",           recorrente:false },
+  { id:216, data:"2026-05-04", descricao:"Rafael Braz dos Santos Ol",                      categoria:"Serviços",       meio:"Pix",           valor:100.00,  obs:"Extrato — prestador externo",           recorrente:false },
+  { id:217, data:"2026-05-04", descricao:"Gilberto Santana dos Reis",                      categoria:"Serviços",       meio:"Pix",           valor:100.00,  obs:"Extrato — prestador externo",           recorrente:false },
+  { id:218, data:"2026-05-04", descricao:"Rafael Braz dos Santos Ol (2)",                  categoria:"Serviços",       meio:"Pix",           valor:150.00,  obs:"Extrato — prestador externo",           recorrente:false },
+  { id:219, data:"2026-05-07", descricao:"Inacio Preite Junior",                           categoria:"Administrativo", meio:"Pix",           valor:50.00,   obs:"Extrato Santander",                     recorrente:false },
+  { id:220, data:"2026-05-11", descricao:"SABESP — Água e Esgoto",                         categoria:"Infraestrutura", meio:"Débito",         valor:236.40,  obs:"Extrato Santander",                     recorrente:true  },
+  { id:221, data:"2026-05-11", descricao:"N-Multimídia Telecomunica (1)",                  categoria:"Infraestrutura", meio:"Pix",            valor:102.91,  obs:"Boleto — extrato",                      recorrente:true  },
+  { id:222, data:"2026-05-11", descricao:"N-Multimídia Telecomunica (2)",                  categoria:"Infraestrutura", meio:"Pix",            valor:99.90,   obs:"Boleto — extrato",                      recorrente:true  },
+  { id:223, data:"2026-05-11", descricao:"TIM S.A.",                                       categoria:"Infraestrutura", meio:"Pix",            valor:62.30,   obs:"Extrato Santander",                     recorrente:true  },
+  { id:224, data:"2026-05-06", descricao:"JBS Dedetizadora",                               categoria:"Serviços",       meio:"Pix",            valor:650.22,  obs:"Boleto — extrato",                      recorrente:false },
+  { id:225, data:"2026-05-06", descricao:"Empório Mega 1 C Alimento",                      categoria:"Alimentação",    meio:"Pix",            valor:845.60,  obs:"Boleto — extrato",                      recorrente:false },
+  { id:226, data:"2026-05-11", descricao:"Uber do Brasil Tecnologia",                      categoria:"Transporte",     meio:"Pix",            valor:19.93,   obs:"Extrato Santander",                     recorrente:false },
+  { id:227, data:"2026-05-12", descricao:"Uber do Brasil Tecnologia",                      categoria:"Transporte",     meio:"Pix",            valor:19.56,   obs:"Extrato Santander",                     recorrente:false },
+  { id:228, data:"2026-05-12", descricao:"Uber do Brasil Tecnologia",                      categoria:"Transporte",     meio:"Pix",            valor:13.99,   obs:"Extrato Santander",                     recorrente:false },
+].map(t=>({...t, classe:"Empresa", excluido:false, motivoExclusao:""}));
 
-.btn { width: 100%; border: none; border-radius: 12px; padding: 15px; font-size: 14px; font-family: 'Nunito', sans-serif; font-weight: 800; cursor: pointer; transition: all .2s; }
-.btn-main { background: #2980B9; color: #fff; }
-.btn-main:hover { background: #1F618D; }
-.btn-main:disabled { background: #D5E8F5; color: #A9B7C6; cursor: not-allowed; }
-.btn-ghost { background: none; border: 2px solid #D5E8F5; color: #7F8C8D; margin-top: 10px; }
-.btn-ghost:hover { border-color: #aaa; color: #555; }
-.btn-del { background: none; border: 2px solid #E74C3C; color: #E74C3C; margin-top: 10px; }
-.btn-del:hover { background: #E74C3C; color: #fff; }
+// ─── JUNHO 2026 ───────────────────────────────────────────────────────────────
+// Fonte: extrato bancário Santander 01/06–24/06/2026 (saídas)
+//        + fatura cartão (Crédito) informada manualmente
+const JUNHO_DATA = [
+  // 01/06 — Extrato bancário
+  { id:301, data:"2026-06-01", descricao:"Uber do Brasil Tecnologia",           categoria:"Transporte",     meio:"Pix",           valor:17.98,   obs:"Extrato Jun/2026",                     recorrente:false },
+  { id:302, data:"2026-06-01", descricao:"Rafael Braz dos Santos",              categoria:"Serviços",       meio:"Pix",           valor:160.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
+  // 01/06 — Fatura cartão
+  { id:303, data:"2026-06-01", descricao:"Manutenção e melhorias",              categoria:"Obra",           meio:"Crédito",       valor:172.00,  obs:"Fatura cartão Jun/2026",               recorrente:true  },
+  { id:304, data:"2026-06-01", descricao:"Manutenção e melhorias",              categoria:"Obra",           meio:"Crédito",       valor:107.00,  obs:"Fatura cartão Jun/2026",               recorrente:true  },
+  { id:305, data:"2026-06-01", descricao:"Padaria mensal",                      categoria:"Alimentação",    meio:"Crédito",       valor:300.29,  obs:"Fatura cartão Jun/2026",               recorrente:false },
+  { id:306, data:"2026-06-01", descricao:"Produtos de limpeza",                 categoria:"Infraestrutura", meio:"Crédito",       valor:392.00,  obs:"Fatura cartão Jun/2026",               recorrente:false },
+  { id:307, data:"2026-06-01", descricao:"Compra mensal junho",                 categoria:"Alimentação",    meio:"Crédito",       valor:1517.20, obs:"Fatura cartão Jun/2026",               recorrente:false },
+  // 03/06 — Extrato bancário
+  { id:308, data:"2026-06-03", descricao:"APM da EMEFEI Silvio Pedro",          categoria:"Administrativo", meio:"Pix",           valor:150.00,  obs:"Extrato Jun/2026",                     recorrente:false },
+  { id:309, data:"2026-06-03", descricao:"Nova Gás Distribuidora",              categoria:"Infraestrutura", meio:"Pix",           valor:120.00,  obs:"Extrato Jun/2026",                     recorrente:true  },
+  // 05/06 — Extrato bancário
+  { id:310, data:"2026-06-05", descricao:"Henrique dos Santos Pereira",         categoria:"Serviços",       meio:"Pix",           valor:270.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
+  { id:311, data:"2026-06-05", descricao:"Pró-labore — Veruska Natalina Preite",categoria:"Salários",       meio:"Pix",           valor:3000.00, obs:"Extrato Jun/2026 · Administrador",     recorrente:true  },
+  { id:312, data:"2026-06-05", descricao:"Vanessa Preite",                      categoria:"Serviços",       meio:"Pix",           valor:1978.00, obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
+  // 08/06 — Extrato bancário
+  { id:313, data:"2026-06-08", descricao:"TIM S.A.",                            categoria:"Infraestrutura", meio:"Pix",           valor:60.99,   obs:"Extrato Jun/2026",                     recorrente:true  },
+  { id:314, data:"2026-06-08", descricao:"Empório Mega 1 C Alimento",           categoria:"Alimentação",    meio:"Pix",           valor:840.00,  obs:"Extrato Jun/2026",                     recorrente:false },
+  { id:315, data:"2026-06-08", descricao:"Pix Enviado CRIAR (operacional)",     categoria:"Administrativo", meio:"Transferência", valor:1505.00, obs:"Extrato Jun/2026 — transf. interna",   recorrente:false },
+  { id:316, data:"2026-06-08", descricao:"Vanessa Preite",                      categoria:"Serviços",       meio:"Pix",           valor:265.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
+  { id:317, data:"2026-06-08", descricao:"Folha de Pagamento — Jun/2026",       categoria:"Salários",       meio:"Transferência", valor:17839.00,obs:"Extrato Jun/2026 — Pix Enviado CRIAR", recorrente:false },
+  { id:318, data:"2026-06-08", descricao:"Uber do Brasil Tecnologia",           categoria:"Transporte",     meio:"Pix",           valor:15.97,   obs:"Extrato Jun/2026",                     recorrente:false },
+  { id:319, data:"2026-06-08", descricao:"Uber do Brasil Tecnologia",           categoria:"Transporte",     meio:"Pix",           valor:17.99,   obs:"Extrato Jun/2026",                     recorrente:false },
+  { id:320, data:"2026-06-08", descricao:"Rafael Braz dos Santos",              categoria:"Serviços",       meio:"Pix",           valor:100.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
+  { id:321, data:"2026-06-08", descricao:"Rafael Braz dos Santos (2)",          categoria:"Serviços",       meio:"Pix",           valor:10.00,   obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
+  // 09/06 — Extrato bancário
+  { id:322, data:"2026-06-09", descricao:"N Multifibra",                        categoria:"Infraestrutura", meio:"Pix",           valor:99.99,   obs:"Extrato Jun/2026",                     recorrente:true  },
+  { id:323, data:"2026-06-09", descricao:"Maria Eugenia T. Gonzalez",           categoria:"Serviços",       meio:"Pix",           valor:1500.00, obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
+  // 10/06 — Extrato bancário
+  { id:324, data:"2026-06-10", descricao:"Diogenes Ricardo da Silva",           categoria:"Serviços",       meio:"Pix",           valor:750.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
+  { id:325, data:"2026-06-10", descricao:"Liliane Souza Preite",                categoria:"Serviços",       meio:"Pix",           valor:35.00,   obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
+  { id:326, data:"2026-06-10", descricao:"Rafael Braz dos Santos",              categoria:"Serviços",       meio:"Pix",           valor:100.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
+  // 11/06 — Extrato bancário
+  { id:327, data:"2026-06-11", descricao:"Mercado Superlar Ltda",               categoria:"Alimentação",    meio:"Pix",           valor:41.94,   obs:"Extrato Jun/2026",                     recorrente:false },
+  { id:328, data:"2026-06-11", descricao:"Tese Comércio de Livros",             categoria:"Material Didático",meio:"Pix",         valor:210.00,  obs:"Extrato Jun/2026",                     recorrente:false },
+  { id:329, data:"2026-06-11", descricao:"Veruska Natalina Preite (reimb.)",    categoria:"Salários",       meio:"Pix",           valor:72.00,   obs:"Extrato Jun/2026 — reembolso",         recorrente:false },
+  { id:330, data:"2026-06-11", descricao:"Gabriella Melo Custódio",             categoria:"Serviços",       meio:"Pix",           valor:1020.00, obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
+  // 12/06 — Extrato bancário
+  { id:331, data:"2026-06-12", descricao:"Rafaela dos Reis Cabral D",           categoria:"Serviços",       meio:"Pix",           valor:170.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
+  // 15/06 — Extrato bancário
+  { id:332, data:"2026-06-15", descricao:"João Carlos Luiz Lima Pri",           categoria:"Serviços",       meio:"Pix",           valor:300.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
+  { id:333, data:"2026-06-15", descricao:"Sempre Nutri Mais",                   categoria:"Alimentação",    meio:"Pix",           valor:245.00,  obs:"Extrato Jun/2026",                     recorrente:false },
+  { id:334, data:"2026-06-15", descricao:"CEF Matriz — FGTS",                  categoria:"Administrativo", meio:"Pix",           valor:217.56,  obs:"Extrato Jun/2026",                     recorrente:true  },
+  { id:335, data:"2026-06-15", descricao:"AES Eletropaulo — Conta de Luz",     categoria:"Infraestrutura", meio:"Débito",         valor:402.63,  obs:"Extrato Jun/2026",                     recorrente:true  },
+  { id:336, data:"2026-06-15", descricao:"Centauro Seguradora",                 categoria:"Administrativo", meio:"Pix",           valor:276.66,  obs:"Extrato Jun/2026",                     recorrente:true  },
+  { id:337, data:"2026-06-15", descricao:"Hadou Soluções Financeira",           categoria:"Administrativo", meio:"Pix",           valor:189.90,  obs:"Extrato Jun/2026",                     recorrente:false },
+  { id:338, data:"2026-06-15", descricao:"Ranny Caroline Mouzinho S",           categoria:"Serviços",       meio:"Pix",           valor:35.00,   obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
+  { id:339, data:"2026-06-15", descricao:"Rosiani Moraes dos Santos",           categoria:"Serviços",       meio:"Pix",           valor:70.00,   obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
+  // 16/06 — Extrato bancário
+  { id:340, data:"2026-06-16", descricao:"Katia do Nascimento",                 categoria:"Serviços",       meio:"Pix",           valor:220.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
+  // 19/06 — Extrato bancário
+  { id:341, data:"2026-06-19", descricao:"IFRACTAL Desenvolvimento",            categoria:"Administrativo", meio:"Pix",           valor:99.60,   obs:"Extrato Jun/2026",                     recorrente:false },
+  { id:342, data:"2026-06-19", descricao:"Receita Federal",                     categoria:"Administrativo", meio:"Pix",           valor:189.48,  obs:"Extrato Jun/2026",                     recorrente:false },
+  { id:343, data:"2026-06-19", descricao:"CEF Matriz — FGTS",                  categoria:"Administrativo", meio:"Pix",           valor:1239.38, obs:"Extrato Jun/2026",                     recorrente:true  },
+  { id:344, data:"2026-06-19", descricao:"DARF Tributos Federais",              categoria:"Administrativo", meio:"Débito",         valor:1057.74, obs:"Extrato Jun/2026",                     recorrente:true  },
+  { id:345, data:"2026-06-19", descricao:"Cleberson Americo de Mora",           categoria:"Serviços",       meio:"Pix",           valor:300.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
+  // 22/06 — Extrato bancário
+  { id:346, data:"2026-06-22", descricao:"Bianca Soares Rodrigues",             categoria:"Serviços",       meio:"Pix",           valor:350.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
+  { id:347, data:"2026-06-22", descricao:"Marcos Braz da Silva",                categoria:"Serviços",       meio:"Pix",           valor:200.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
+  { id:348, data:"2026-06-22", descricao:"Pix Enviado CRIAR (operacional)",     categoria:"Administrativo", meio:"Transferência", valor:8700.00, obs:"Extrato Jun/2026 — transf. interna",   recorrente:false },
+  // 23/06 — Extrato bancário
+  { id:349, data:"2026-06-23", descricao:"META QSM Gerenciamento",              categoria:"Administrativo", meio:"Pix",           valor:750.00,  obs:"Extrato Jun/2026",                     recorrente:false },
+  { id:350, data:"2026-06-23", descricao:"DARF Tributos Federais",              categoria:"Administrativo", meio:"Débito",         valor:596.58,  obs:"Extrato Jun/2026",                     recorrente:false },
+  { id:351, data:"2026-06-23", descricao:"Receita Federal",                     categoria:"Administrativo", meio:"Pix",           valor:132.90,  obs:"Extrato Jun/2026",                     recorrente:false },
+].map(t=>({...t, classe:"Empresa", excluido:false, motivoExclusao:""}));
 
-.fab { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #2980B9, #8E44AD); color: #fff; border: none; border-radius: 50px; padding: 14px 26px; font-size: 13px; font-family: 'Nunito', sans-serif; font-weight: 800; cursor: pointer; box-shadow: 0 6px 24px rgba(41,128,185,0.35); z-index: 90; white-space: nowrap; display: flex; align-items: center; gap: 8px; transition: all .2s; }
-.fab:hover { transform: translateX(-50%) translateY(-2px); }
-.fab:active { transform: translateX(-50%) scale(.97); }
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const fmt     = v => v.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+const fmtDate = d => { const[,m,day]=d.split("-"); return `${day}/${m}`; };
+const hoje    = () => new Date().toISOString().slice(0,10);
+const d2brl   = d => { const n=parseInt(d||"0",10); return `${Math.floor(n/100).toLocaleString("pt-BR")},${String(n%100).padStart(2,"0")}`; };
+const d2float = d => parseInt(d||"0",10)/100;
+const float2d = v => String(Math.round(v*100));
+const soma    = arr => arr.filter(t=>!t.excluido).reduce((s,t)=>s+t.valor,0);
+const padN    = n => String(n).padStart(2,"0");
 
-.overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 200; display: flex; align-items: flex-end; backdrop-filter: blur(2px); }
-.sheet { background: #fff; border-radius: 24px 24px 0 0; padding: 8px 20px 48px; width: 100%; max-width: 480px; margin: 0 auto; max-height: 92vh; overflow-y: auto; animation: sheetUp .26s cubic-bezier(.32,.72,0,1); }
-@keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-.handle { width: 40px; height: 4px; background: #E8EDF5; border-radius: 2px; margin: 12px auto 20px; }
+const CSS = `@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
+*{box-sizing:border-box;margin:0;padding:0} html,body{background:#F0F6FF}
+input,select,textarea{-webkit-appearance:none;appearance:none}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#2980B9!important;box-shadow:0 0 0 3px #2980B920}
+.tab:hover{color:#1A5276!important}
+.btn-primary{background:#2980B9;color:#fff;border:none;border-radius:12px;padding:16px;font-size:15px;font-family:'Nunito',sans-serif;font-weight:800;cursor:pointer;width:100%;transition:all .2s}
+.btn-primary:hover{background:#1F618D}
+.btn-ghost{background:none;border:2px solid #D5E8F5;border-radius:12px;padding:14px;font-size:14px;font-family:'Nunito',sans-serif;font-weight:700;cursor:pointer;width:100%;color:#5D6D7E;transition:all .2s;margin-top:10px}
+.btn-ghost:hover{border-color:#aaa;color:#333}
+.btn-danger{background:none;border:2px solid #E74C3C;border-radius:12px;padding:14px;font-size:14px;font-family:'Nunito',sans-serif;font-weight:700;cursor:pointer;width:100%;color:#E74C3C;transition:all .2s;margin-top:10px}
+.btn-danger:hover{background:#E74C3C;color:#fff}
+.fab{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#2980B9,#8E44AD);color:#fff;border:none;border-radius:50px;padding:15px 28px;font-size:14px;font-family:'Nunito',sans-serif;font-weight:800;cursor:pointer;box-shadow:0 6px 24px #2980B940;z-index:90;display:flex;align-items:center;gap:8px;transition:all .2s;white-space:nowrap}
+.fab:hover{transform:translateX(-50%) translateY(-2px)} .fab:active{transform:translateX(-50%) scale(.98)}
+.overlay{position:fixed;inset:0;background:#00000055;z-index:200;display:flex;align-items:flex-end}
+.sheet{background:#fff;border-radius:24px 24px 0 0;padding:8px 20px 40px;width:100%;max-width:480px;margin:0 auto;animation:sheetUp .28s cubic-bezier(.32,.72,0,1);max-height:94vh;overflow-y:auto}
+@keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.overlay-top{position:fixed;inset:0;background:#00000055;z-index:200;display:flex;align-items:flex-start;padding-top:120px}
+.sheet-top{background:#fff;border-radius:20px;padding:0 0 20px;width:calc(100% - 32px);max-width:448px;margin:0 auto;animation:fadeDown .22s ease;max-height:70vh;overflow-y:auto;box-shadow:0 8px 32px #00000020}
+@keyframes fadeDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+.handle{width:40px;height:4px;background:#e8e8e8;border-radius:2px;margin:12px auto 20px}
+.row-item{transition:background .12s;border-radius:8px} .row-item:active{background:#EBF5FB}
+.row-excluido{opacity:.4}
+.badge{display:inline-flex;align-items:center;border-radius:20px;padding:2px 9px;font-size:10px;font-weight:700;font-family:'Nunito',sans-serif;margin-top:3px}
+.icon-btn{background:none;border:2px solid #D5E8F5;border-radius:8px;width:30px;height:30px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0;color:#7F8C8D}
+.icon-btn:hover{border-color:#2980B9;color:#2980B9}
+.notif-btn{position:relative;background:none;border:2px solid #D5E8F5;border-radius:10px;width:40px;height:40px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#7F8C8D;transition:all .2s;flex-shrink:0}
+.notif-btn:hover,.notif-btn.has-pending{border-color:#E67E22;color:#E67E22;background:#FEF5EC}
+.notif-dot{position:absolute;top:-4px;right:-4px;width:16px;height:16px;background:#E67E22;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:700;font-family:'Nunito',sans-serif;border:2px solid #F0F6FF}
+.coll-toggle{cursor:pointer;transition:all .15s;border-radius:14px;user-select:none}
+.reveal{animation:fadeIn .2s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.arrow-btn{background:none;border:2px solid #D5E8F5;border-radius:8px;width:34px;height:34px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#5D6D7E;transition:all .2s;flex-shrink:0}
+.arrow-btn:hover:not(:disabled){border-color:#2980B9;color:#2980B9} .arrow-btn:disabled{opacity:.3;cursor:not-allowed}
+.mes-btn{background:none;border:2px solid #D5E8F5;border-radius:10px;padding:8px 16px;cursor:pointer;font-family:'Nunito',sans-serif;font-size:14px;font-weight:700;color:#1A5276;display:flex;align-items:center;gap:8px;transition:border .2s}
+.mes-btn:hover{border-color:#2980B9}
+.month-picker{position:absolute;top:110%;left:50%;transform:translateX(-50%);background:#fff;border-radius:16px;padding:20px;box-shadow:0 8px 32px #00000022;z-index:300;width:280px;animation:fadeIn .15s ease}
+.mc{border:none;border-radius:8px;padding:10px 4px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s;color:#333;background:none;width:100%}
+.mc:hover:not(.mc-dis){background:#EBF5FB} .mc-act{background:#2980B9!important;color:#fff!important} .mc-dis{opacity:.3;cursor:not-allowed}
+.period-btn{border:2px solid #D5E8F5;border-radius:10px;background:#F8FBFF;color:#5D6D7E;font-size:13px;cursor:pointer;font-family:'Nunito',sans-serif;font-weight:700;text-align:center;transition:all .2s;padding:10px 6px;flex:1}
+.period-btn:hover,.period-btn.on{border-color:#2980B9;background:#2980B9;color:#fff}
+.rep-btn{border:2px solid #D5E8F5;border-radius:10px;background:#F8FBFF;color:#5D6D7E;font-size:13px;font-family:'Nunito',sans-serif;font-weight:700;cursor:pointer;transition:all .2s;padding:8px 10px}
+.rep-btn:hover,.rep-btn.on{border-color:#2980B9;background:#2980B9;color:#fff}
+.pend-item{padding:14px 20px;border-bottom:1px solid #EBF5FB;display:flex;justify-content:space-between;align-items:center;gap:10}
+.pend-item:last-child{border-bottom:none}
+.toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#1A5276;color:#fff;padding:12px 24px;border-radius:50px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:700;z-index:500;white-space:nowrap;animation:toastIn .25s ease;pointer-events:none}
+@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+::-webkit-scrollbar{width:3px} ::-webkit-scrollbar-thumb{background:#2980B9;border-radius:2px}`;
 
-.row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 13px 0; border-bottom: 1px solid #EBF5FB; }
-.row:last-child { border-bottom: none; }
-
-.tab-b { flex: 1; background: none; border: none; border-bottom: 2.5px solid transparent; color: #A9B7C6; padding: 10px 4px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; font-family: 'Nunito', sans-serif; font-weight: 800; transition: all .2s; }
-.tab-b.on { color: #2980B9; border-bottom-color: #2980B9; }
-.tab-b:hover { color: #1A5276; }
-
-.coll { background: #fff; border-radius: 14px; margin-bottom: 10px; overflow: hidden; border: 1px solid #D5E8F5; box-shadow: 0 2px 8px rgba(41,128,185,0.07); }
-.coll-h { padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: background .15s; }
-.coll-h:hover { background: #F8FBFF; }
-.coll-b { border-top: 1px solid #EBF5FB; padding: 0 16px; }
-
-.badge-rec { display: inline-block; background: #EBF5FB; color: #2980B9; border: 1px solid #AED6F1; border-radius: 20px; padding: 1px 7px; font-size: 9px; font-weight: 700; margin-left: 6px; }
-.badge-exc { display: inline-block; background: #FDEDEC; color: #E74C3C; border: 1px solid #F1948A; border-radius: 20px; padding: 1px 7px; font-size: 9px; font-weight: 700; margin-top: 3px; }
-
-.notif-btn { position: relative; background: none; border: 2px solid #D5E8F5; border-radius: 10px; width: 40px; height: 40px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #7F8C8D; transition: all .2s; flex-shrink: 0; }
-.notif-btn:hover, .notif-btn.has-pending { border-color: #E67E22; color: #E67E22; background: #FEF5EC; }
-.notif-dot { position: absolute; top: -4px; right: -4px; width: 16px; height: 16px; background: #E67E22; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #fff; font-weight: 700; border: 2px solid #F0F6FF; }
-
-.toast { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); background: #1A5276; color: #fff; padding: 11px 22px; border-radius: 50px; font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 700; z-index: 500; white-space: nowrap; pointer-events: none; animation: toastIn .22s ease; }
-@keyframes toastIn { from { opacity: 0; transform: translateX(-50%) translateY(8px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
-
-.pend-item { padding: 14px 20px; border-bottom: 1px solid #EBF5FB; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-.pend-item:last-child { border-bottom: none; }
-
-.overlay-top { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 200; display: flex; align-items: flex-start; padding-top: 120px; }
-.sheet-top { background: #fff; border-radius: 20px; padding: 0 0 20px; width: calc(100% - 32px); max-width: 448px; margin: 0 auto; animation: fadeDown .22s ease; max-height: 70vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.15); }
-@keyframes fadeDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-
-.spin { display: inline-block; width: 14px; height: 14px; border: 2px solid #D5E8F5; border-top-color: #2980B9; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-::-webkit-scrollbar { width: 3px; }
-::-webkit-scrollbar-thumb { background: #AED6F1; border-radius: 2px; }
-`;
-
-// ─── BAR ──────────────────────────────────────────────────────────────────────────
-function Bar({ p, color }) {
+function Logo({size=48}) {
   return (
-    <div style={{ background: "#E8F4FD", borderRadius: 4, height: 6, overflow: "hidden", marginTop: 4 }}>
-      <div style={{ width: `${Math.min(Math.max(p, 0), 100)}%`, background: color, height: "100%", borderRadius: 4, transition: "width .5s ease" }} />
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
+      <circle cx="50" cy="50" r="50" fill="white"/>
+      {[{color:"#E67E22",rot:0},{color:"#8E44AD",rot:-72},{color:"#2980B9",rot:72},{color:"#27AE60",rot:-144},{color:"#E91E8C",rot:144}].map(({color,rot},i)=>(
+        <g key={i} transform={`rotate(${rot} 50 50)`}>
+          <ellipse cx="50" cy="24" rx="9" ry="13" fill={color}/>
+          <ellipse cx="43" cy="14" rx="2.2" ry="5" fill={color} transform="rotate(-15 43 14)"/>
+          <ellipse cx="47" cy="12" rx="2.2" ry="5" fill={color} transform="rotate(-5 47 12)"/>
+          <ellipse cx="51" cy="12" rx="2.2" ry="5" fill={color} transform="rotate(5 51 12)"/>
+          <ellipse cx="55" cy="13" rx="2.2" ry="5" fill={color} transform="rotate(15 55 13)"/>
+        </g>
+      ))}
+      <text x="50" y="52" textAnchor="middle" fontFamily="Nunito,sans-serif" fontSize="9" fontWeight="900" fill="#1A5276" letterSpacing="2">CRIAR</text>
+    </svg>
+  );
+}
+
+function Bar({percent,color="#2980B9"}) {
+  return (
+    <div style={{background:"#E8F4FD",borderRadius:4,height:6,width:"100%",overflow:"hidden"}}>
+      <div style={{width:`${Math.min(Math.max(percent,0),100)}%`,background:color,height:"100%",borderRadius:4}}/>
     </div>
   );
 }
 
-// ─── FORM ────────────────────────────────────────────────────────────────────────
-function FormSheet({ mes, onSaved, onClose }) {
-  const [cat,  setCat]  = useState("");
-  const [desc, setDesc] = useState("");
-  const [val,  setVal]  = useState("");
-  const [meio, setMeio] = useState("Pix");
-  const [data, setData] = useState(mes + "-" + new Date().toISOString().slice(8, 10));
-  const [obs,  setObs]  = useState("");
-  const [rec,  setRec]  = useState(false);
-  const [reps, setReps] = useState(3);
-  const [err,  setErr]  = useState({});
-  const [busy, setBusy] = useState(false);
+function Toggle({value,onChange}) {
+  return (
+    <div style={{width:44,height:24,borderRadius:12,cursor:"pointer",transition:"background .2s",background:value?"#2980B9":"#ddd",display:"flex",alignItems:"center",padding:2,flexShrink:0}} onClick={()=>onChange(!value)}>
+      <div style={{width:20,height:20,borderRadius:"50%",background:"#fff",boxShadow:"0 1px 4px #0003",transition:"transform .2s",transform:value?"translateX(20px)":"translateX(0)"}}/>
+    </div>
+  );
+}
 
-  const set = (k, v) => {
-    if (k === "cat")   setCat(v);
-    else if (k === "desc") setDesc(v);
-    else if (k === "val")  setVal(v);
-    else if (k === "meio") setMeio(v);
-    else if (k === "data") setData(v);
-    else setObs(v);
-    setErr(e => ({ ...e, [k]: false }));
-  };
+function Comparativo({atual,anterior,isParcial}) {
+  if(!anterior) return null;
+  const diff=((atual-anterior)/anterior)*100;
+  const baixo=diff<0;
+  const cor=baixo?"#27AE60":"#E74C3C";
+  return (
+    <div style={{display:"inline-flex",alignItems:"center",gap:6,background:baixo?"#EAFAF1":"#FDEDEC",border:`1px solid ${cor}30`,borderRadius:8,padding:"4px 10px",marginTop:8}}>
+      <span style={{fontSize:14,color:cor,fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>{baixo?"▼":"▲"} {Math.abs(diff).toFixed(1)}%</span>
+      <span style={{fontSize:10,color:"#7F8C8D",letterSpacing:"0.06em",textTransform:"uppercase",fontWeight:700}}>{isParcial?"vs mesmo período ant.":"vs mês anterior"}</span>
+    </div>
+  );
+}
 
-  const salvar = async () => {
-    const e = {};
-    if (!cat)         e.cat  = true;
-    if (!desc.trim()) e.desc = true;
-    const v = parseFloat(val.replace(",", "."));
-    if (!v || v <= 0) e.val  = true;
-    if (!data)        e.data = true;
-    if (Object.keys(e).length) { setErr(e); return; }
-    setBusy(true);
-    const item = {
-      id:              uid(),
-      cliente_id:      CID,
-      mes:             data.slice(0, 7),
-      centro:          "empresa",
-      categoria:       cat,
-      descricao:       desc.trim(),
-      valor:           v,
-      meio,
-      data,
-      obs,
-      excluido:        false,
-      recorrente:      rec,
-      motivo_exclusao: "",
-    };
-    const res = await sbPost(item);
-    if (res && rec && reps > 1) {
-      const [ano, mesN, dia] = data.split("-").map(Number);
-      for (let i = 1; i < reps; i++) {
-        const d = new Date(ano, mesN - 1 + i, dia);
-        const novaData = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-        await sbPost({
-          id: uid(), cliente_id: CID, mes: novaData.slice(0, 7),
-          centro: "empresa", categoria: cat, descricao: desc.trim(), valor: v,
-          meio, data: novaData, obs, excluido: false, recorrente: true, motivo_exclusao: "",
-        });
-      }
+function CollapsibleSection({label,count,valor,color,children}) {
+  const [open,setOpen]=useState(false);
+  return (
+    <div style={{marginBottom:12}}>
+      <div className="coll-toggle" onClick={()=>setOpen(o=>!o)}
+        style={{background:"#fff",borderRadius:14,padding:"16px 18px",boxShadow:"0 2px 8px #2980B910",display:"flex",justifyContent:"space-between",alignItems:"center",border:open?`2px solid ${color}`:"2px solid transparent",transition:"all .2s"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:4,height:20,background:color,borderRadius:2}}/>
+          <div>
+            <div style={{fontSize:15,fontWeight:800,color:"#1A5276",fontFamily:"'Nunito',sans-serif"}}>{label}</div>
+            {count!=null&&<div style={{fontSize:11,color:"#A9B7C6",marginTop:1,fontFamily:"'Nunito',sans-serif"}}>{count} lançamentos</div>}
+          </div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          {valor!=null&&<div style={{fontSize:18,fontWeight:800,color:"#1A5276",fontFamily:"'Nunito',sans-serif"}}>{fmt(valor)}</div>}
+          <div style={{color:"#A9B7C6",transition:"transform .25s",transform:open?"rotate(180deg)":"rotate(0)"}}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+        </div>
+      </div>
+      {open&&<div className="reveal" style={{marginTop:6}}>{children}</div>}
+    </div>
+  );
+}
+
+function MonthPicker({mesAtual,onSelect,onClose}) {
+  const ano=parseInt(mesAtual.slice(0,4));
+  const disp=MESES.map(m=>m.mes);
+  return (
+    <>
+      <div style={{position:"fixed",inset:0,zIndex:299}} onClick={onClose}/>
+      <div className="month-picker">
+        <div style={{fontSize:15,fontFamily:"'Nunito',sans-serif",fontWeight:800,color:"#1A5276",marginBottom:14,textAlign:"center"}}>{ano}</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
+          {MESES_NOMES.map((nome,i)=>{
+            const key=`${ano}-${padN(i+1)}`;
+            const isAct=key===mesAtual;
+            const isDis=!disp.includes(key);
+            return <button key={key} className={`mc${isAct?" mc-act":""}${isDis?" mc-dis":""}`} disabled={isDis} onClick={()=>{if(!isDis){onSelect(key);onClose();}}}>{nome}</button>;
+          })}
+        </div>
+      </div>
+    </>
+  );
+}
+
+const emptyForm=()=>({descricao:"",valorDigits:"",categoria:"",meio:"",data:hoje(),obs:"",recorrente:false,periodicidade:"Mensal",diaVencimento:"",repeticoes:null});
+const INP=err=>({background:"#F8FBFF",border:`2px solid ${err?"#E74C3C":"#D5E8F5"}`,borderRadius:10,color:"#1A5276",padding:"13px 14px",fontSize:15,fontFamily:"'Nunito',sans-serif",width:"100%",transition:"border .2s"});
+const FL={fontSize:11,color:"#7F8C8D",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:7,display:"block",fontWeight:700,fontFamily:"'Nunito',sans-serif"};
+
+function FormBody({form,setForm,erro,setErro}) {
+  const Err=({k})=>erro[k]?<div style={{fontSize:11,color:"#E74C3C",marginTop:4,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{erro[k]}</div>:null;
+  return (
+    <>
+      <div style={{marginBottom:16}}>
+        <label style={FL}>Descrição *</label>
+        <input style={INP(erro.descricao)} placeholder="Ex: Salário — Nome" value={form.descricao}
+          onChange={e=>{setForm(f=>({...f,descricao:e.target.value}));setErro(r=>({...r,descricao:null}));}}/>
+        <Err k="descricao"/>
+      </div>
+      <div style={{marginBottom:16}}>
+        <label style={FL}>Valor *</label>
+        <div style={{position:"relative"}}>
+          <span style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",fontSize:14,color:"#7F8C8D",fontFamily:"'Nunito',sans-serif",fontWeight:700}}>R$</span>
+          <input style={{...INP(erro.valor),paddingLeft:40,fontSize:20,fontWeight:800}} placeholder="0,00"
+            value={form.valorDigits?d2brl(form.valorDigits):""} inputMode="numeric"
+            onChange={e=>{setForm(f=>({...f,valorDigits:e.target.value.replace(/\D/g,"")}));setErro(r=>({...r,valor:null}));}}/>
+        </div>
+        <Err k="valor"/>
+      </div>
+      <div style={{marginBottom:16}}>
+        <label style={FL}>Categoria *</label>
+        <select style={INP(erro.categoria)} value={form.categoria}
+          onChange={e=>{setForm(f=>({...f,categoria:e.target.value}));setErro(r=>({...r,categoria:null}));}}>
+          <option value="">Selecione...</option>
+          {CATEGORIAS.map(c=><option key={c} value={c}>{c}</option>)}
+        </select>
+        <Err k="categoria"/>
+      </div>
+      <div style={{marginBottom:16}}>
+        <label style={FL}>Meio de Pagamento *</label>
+        <select style={INP(erro.meio)} value={form.meio}
+          onChange={e=>{setForm(f=>({...f,meio:e.target.value}));setErro(r=>({...r,meio:null}));}}>
+          <option value="">Selecione...</option>
+          {MEIOS.map(m=><option key={m} value={m}>{m}</option>)}
+        </select>
+        <Err k="meio"/>
+      </div>
+      <div style={{marginBottom:16}}>
+        <label style={FL}>Data *</label>
+        <input type="date" style={INP(erro.data)} value={form.data}
+          onChange={e=>{setForm(f=>({...f,data:e.target.value}));setErro(r=>({...r,data:null}));}}/>
+        <Err k="data"/>
+      </div>
+      <div style={{marginBottom:8}}>
+        <label style={FL}>Observação</label>
+        <textarea style={{...INP(false),minHeight:72,resize:"none",fontSize:14}} placeholder="Cargo, referência, etc."
+          value={form.obs} onChange={e=>setForm(f=>({...f,obs:e.target.value}))}/>
+      </div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 0",borderTop:"2px solid #EBF5FB",marginTop:4}}>
+        <div>
+          <div style={{fontSize:14,fontWeight:800,color:"#1A5276",fontFamily:"'Nunito',sans-serif"}}>Despesa Recorrente</div>
+          <div style={{fontSize:11,color:"#A9B7C6",marginTop:2,fontFamily:"'Nunito',sans-serif"}}>Lança automaticamente nos próximos meses</div>
+        </div>
+        <Toggle value={form.recorrente} onChange={v=>setForm(f=>({...f,recorrente:v}))}/>
+      </div>
+      {form.recorrente&&(
+        <div style={{background:"#EBF5FB",border:"1.5px solid #AED6F1",borderRadius:12,padding:16,marginTop:8}}>
+          <div style={{fontSize:11,color:"#2980B9",letterSpacing:"0.1em",textTransform:"uppercase",fontWeight:800,marginBottom:14,fontFamily:"'Nunito',sans-serif"}}>Configurar Recorrência</div>
+          <div style={{marginBottom:14}}>
+            <label style={FL}>Periodicidade *</label>
+            <div style={{display:"flex",gap:8}}>
+              {PERIODICIDADES.map(p=><button key={p} className={`period-btn${form.periodicidade===p?" on":""}`} onClick={()=>setForm(f=>({...f,periodicidade:p}))}>{p}</button>)}
+            </div>
+          </div>
+          <div style={{marginBottom:14}}>
+            <label style={FL}>Dia do Vencimento *</label>
+            <input type="number" min="1" max="31" style={{...INP(erro.diaVencimento),width:"50%"}} placeholder="Ex: 8"
+              value={form.diaVencimento} onChange={e=>setForm(f=>({...f,diaVencimento:e.target.value}))}/>
+            {erro.diaVencimento&&<div style={{fontSize:11,color:"#E74C3C",marginTop:4,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{erro.diaVencimento}</div>}
+          </div>
+          <div>
+            <label style={FL}>Repetir por quantos meses? *</label>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {REPETICOES_OPT.map(n=><button key={n} className={`rep-btn${form.repeticoes===n?" on":""}`} onClick={()=>setForm(f=>({...f,repeticoes:n}))}>{n}x</button>)}
+            </div>
+            {erro.repeticoes&&<div style={{fontSize:11,color:"#E74C3C",marginTop:4,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{erro.repeticoes}</div>}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+const INIT_STATE={
+  "2026-04":ABRIL_DATA,
+  "2026-05":MAIO_DATA,
+  "2026-06":JUNHO_DATA,
+  "2026-07":[],
+  "2026-08":[],
+  "2026-09":[],
+};
+
+export default function App() {
+  const [mesIdx,setMesIdx]         = useState(2);
+  const [allItems,setAllItems]     = useState(INIT_STATE);
+  const [view,setView]             = useState("inicio");
+  const [showPicker,setShowPicker] = useState(false);
+  const [showPend,setShowPend]     = useState(false);
+  const [showForm,setShowForm]     = useState(false);
+  const [editItem,setEditItem]     = useState(null);
+  const [delItem,setDelItem]       = useState(null);
+  const [motivoExc,setMotivoExc]   = useState("");
+  const [motivoErr,setMotivoErr]   = useState(false);
+  const [form,setForm]             = useState(emptyForm());
+  const [erro,setErro]             = useState({});
+  const [toast,setToast]           = useState(null);
+
+  const mesAtual  = MESES[mesIdx];
+  const mesAnt    = mesIdx>0?MESES[mesIdx-1]:null;
+  const isFechado = mesAtual.fechado;
+  const items     = allItems[mesAtual.mes]||[];
+  const itemsAnt  = mesAnt?(allItems[mesAnt.mes]||[]):[];
+
+  const ativos   = useMemo(()=>items.filter(t=>!t.excluido),[items]);
+  const total    = useMemo(()=>ativos.reduce((s,t)=>s+t.valor,0),[ativos]);
+  const maxDia   = useMemo(()=>{const d=items.map(t=>parseInt(t.data.slice(8,10)));return d.length?Math.max(...d):31;},[items]);
+  const totalAnt = useMemo(()=>soma(itemsAnt.filter(t=>parseInt(t.data.slice(8,10))<=maxDia)),[itemsAnt,maxDia]);
+  const sorted   = useMemo(()=>[...items].sort((a,b)=>new Date(b.data)-new Date(a.data)),[items]);
+  const byCat    = useMemo(()=>{
+    const m={};
+    ativos.forEach(t=>{m[t.categoria]=(m[t.categoria]||0)+t.valor;});
+    return Object.entries(m).map(([cat,val])=>({cat,val})).sort((a,b)=>b.val-a.val);
+  },[ativos]);
+  const pendencias = useMemo(()=>{
+    if(isFechado||!mesAnt) return [];
+    return itemsAnt.filter(t=>t.recorrente&&!t.excluido)
+      .filter(base=>!items.some(t=>t.descricao===base.descricao&&!t.excluido));
+  },[items,itemsAnt,mesAnt,isFechado]);
+
+  const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(null),2500);};
+  const setItems=fn=>setAllItems(p=>({...p,[mesAtual.mes]:typeof fn==="function"?fn(p[mesAtual.mes]||[]):fn}));
+  const goMes=dir=>{setMesIdx(i=>i+dir);setShowPicker(false);setShowPend(false);};
+
+  const validar=f=>{
+    const e={};
+    if(!f.descricao.trim())                            e.descricao    ="Campo obrigatório";
+    if(!f.valorDigits||parseInt(f.valorDigits)===0)    e.valor        ="Campo obrigatório";
+    if(!f.categoria)                                   e.categoria    ="Selecione uma categoria";
+    if(!f.meio)                                        e.meio         ="Selecione o meio de pagamento";
+    if(!f.data)                                        e.data         ="Campo obrigatório";
+    if(f.recorrente){
+      const dia=parseInt(f.diaVencimento);
+      if(!f.diaVencimento||isNaN(dia)||dia<1||dia>31) e.diaVencimento="Informe um dia válido (1–31)";
+      if(!f.repeticoes)                                e.repeticoes   ="Selecione quantas repetições";
     }
-    setBusy(false);
-    if (res) { onSaved(); onClose(); }
-    else setErr({ geral: "Erro ao salvar. Verifique a conexão." });
+    return e;
   };
 
-  const LBL = { fontSize: 10, color: "#7F8C8D", letterSpacing: ".1em", textTransform: "uppercase", fontWeight: 700, display: "block", marginBottom: 7 };
-  const E = ({ k }) => err[k] ? <div style={{ fontSize: 11, color: "#E74C3C", marginTop: 4, fontWeight: 700 }}>Obrigatório</div> : null;
-
-  return (
-    <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="sheet">
-        <div className="handle" />
-        <div style={{ fontSize: 20, fontWeight: 900, color: "#1A5276", marginBottom: 20 }}>Novo Lançamento</div>
-
-        {err.geral && (
-          <div style={{ background: "#FDEDEC", border: "1px solid #F1948A", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#E74C3C", marginBottom: 14, fontWeight: 700 }}>
-            {err.geral}
-          </div>
-        )}
-
-        <div style={{ marginBottom: 16 }}>
-          <label style={LBL}>Categoria *</label>
-          <select className={`inp${err.cat ? " inp-err" : ""}`} value={cat} onChange={e => set("cat", e.target.value)}>
-            <option value="">Selecione…</option>
-            {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <E k="cat" />
-        </div>
-
-        <div style={{ marginBottom: 16 }}>
-          <label style={LBL}>Descrição *</label>
-          <input className={`inp${err.desc ? " inp-err" : ""}`}
-            placeholder="Ex: Salário — Nome, SABESP, JBS Dedetizadora…"
-            value={desc} onChange={e => set("desc", e.target.value)} />
-          <E k="desc" />
-        </div>
-
-        <div style={{ marginBottom: 16 }}>
-          <label style={LBL}>Valor (R$) *</label>
-          <input className={`inp${err.val ? " inp-err" : ""}`}
-            type="number" inputMode="decimal" placeholder="0,00"
-            value={val} onChange={e => set("val", e.target.value)} />
-          <E k="val" />
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-          <div>
-            <label style={LBL}>Meio</label>
-            <select className="inp" value={meio} onChange={e => set("meio", e.target.value)}>
-              {MEIOS.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={LBL}>Data *</label>
-            <input className={`inp${err.data ? " inp-err" : ""}`} type="date" value={data} onChange={e => set("data", e.target.value)} />
-            <E k="data" />
-          </div>
-        </div>
-
-        <div style={{ marginBottom: 16 }}>
-          <label style={LBL}>Observação</label>
-          <textarea className="inp" style={{ minHeight: 60, resize: "none", fontSize: 13 }}
-            placeholder="Cargo, referência, nota fiscal…"
-            value={obs} onChange={e => set("obs", e.target.value)} />
-        </div>
-
-        {/* Recorrente */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderTop: "1px solid #EBF5FB", marginBottom: rec ? 12 : 20 }}>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 800, color: "#1A5276" }}>Despesa Recorrente</div>
-            <div style={{ fontSize: 11, color: "#A9B7C6", marginTop: 1 }}>Repete nos próximos meses</div>
-          </div>
-          <div
-            style={{ width: 44, height: 24, borderRadius: 12, cursor: "pointer", background: rec ? "#2980B9" : "#D5E8F5", display: "flex", alignItems: "center", padding: 2, transition: "background .2s", flexShrink: 0 }}
-            onClick={() => setRec(r => !r)}>
-            <div style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.15)", transition: "transform .2s", transform: rec ? "translateX(20px)" : "none" }} />
-          </div>
-        </div>
-
-        {/* Quantidade de repetições */}
-        {rec && (
-          <div style={{ background: "#EBF5FB", border: "1px solid #AED6F1", borderRadius: 10, padding: "14px", marginBottom: 20 }}>
-            <label style={LBL}>Quantas vezes repetir? (1 a 24)</label>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div
-                onClick={() => setReps(r => Math.max(1, r - 1))}
-                style={{
-                  width: 44, height: 44, borderRadius: 10, cursor: "pointer",
-                  border: "2px solid #D5E8F5", background: "#fff", color: "#2980B9",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 22, fontWeight: 800, userSelect: "none", flexShrink: 0,
-                }}>−</div>
-              <input
-                type="number" inputMode="numeric" min="1" max="24"
-                value={reps}
-                onChange={e => {
-                  let n = parseInt(e.target.value) || 1;
-                  if (n < 1) n = 1;
-                  if (n > 24) n = 24;
-                  setReps(n);
-                }}
-                style={{
-                  flex: 1, textAlign: "center", border: "2px solid #D5E8F5",
-                  borderRadius: 10, padding: "11px", fontSize: 22, fontWeight: 900,
-                  color: "#1A5276", outline: "none", background: "#fff",
-                  MozAppearance: "textfield", appearance: "textfield",
-                }} />
-              <div
-                onClick={() => setReps(r => Math.min(24, r + 1))}
-                style={{
-                  width: 44, height: 44, borderRadius: 10, cursor: "pointer",
-                  border: "2px solid #D5E8F5", background: "#fff", color: "#2980B9",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 22, fontWeight: 800, userSelect: "none", flexShrink: 0,
-                }}>+</div>
-            </div>
-            <div style={{ fontSize: 11, color: "#2980B9", marginTop: 10, fontWeight: 700 }}>
-              {reps === 1
-                ? "Será lançado apenas este mês"
-                : `Será lançado este mês + ${reps - 1} mês(es) seguinte(s)`}
-            </div>
-          </div>
-        )}
-
-        <button className="btn btn-main" onClick={salvar} disabled={busy}>
-          {busy ? <><span className="spin" /> Salvando…</> : "✓ Registrar Lançamento"}
-        </button>
-        <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
-      </div>
-    </div>
-  );
-}
-
-// ─── EXCLUIR ─────────────────────────────────────────────────────────────────────
-function DelSheet({ item, onDone, onClose }) {
-  const [motivo, setMotivo] = useState("");
-  const [err,    setErr]    = useState(false);
-  const [busy,   setBusy]   = useState(false);
-
-  const confirmar = async () => {
-    if (!motivo.trim()) { setErr(true); return; }
-    setBusy(true);
-    const ok = await sbPatch(item.id, { excluido: true, motivo_exclusao: motivo.trim() });
-    setBusy(false);
-    if (ok) { onDone(); onClose(); }
+  const inserirRecorrentes=(novoItem,f)=>{
+    if(!f.recorrente) return;
+    const reps=parseInt(f.repeticoes),dia=parseInt(f.diaVencimento);
+    const [ano,mes]=mesAtual.mes.split("-").map(Number);
+    const updates={};
+    for(let i=1;i<=reps;i++){
+      let nm=mes+i,na=ano;
+      if(nm>12){nm-=12;na++;}
+      const key=`${na}-${padN(nm)}`;
+      if(!MESES.find(m=>m.mes===key)) continue;
+      updates[key]=[...(updates[key]||[]),{id:Date.now()+i,descricao:novoItem.descricao,valor:novoItem.valor,categoria:novoItem.categoria,classe:"Empresa",meio:novoItem.meio,data:`${key}-${padN(dia)}`,obs:novoItem.obs,excluido:false,motivoExclusao:"",recorrente:true}];
+    }
+    if(Object.keys(updates).length)
+      setAllItems(p=>{const u={...p};Object.entries(updates).forEach(([k,v])=>{u[k]=[...(u[k]||[]),...v];});return u;});
   };
 
-  return (
-    <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="sheet">
-        <div className="handle" />
-        <div style={{ fontSize: 18, fontWeight: 900, color: "#E74C3C", marginBottom: 6 }}>Excluir Lançamento</div>
-        <div style={{ fontSize: 14, fontWeight: 700, color: "#1A5276", marginBottom: 2 }}>{item.descricao}</div>
-        <div style={{ fontSize: 13, color: "#A9B7C6", marginBottom: 18 }}>{fmt(item.valor)} · {fd(item.data)}</div>
-        <div style={{ background: "#FDEDEC", border: "1px solid #F1948A44", borderRadius: 10, padding: "12px 14px", marginBottom: 18, fontSize: 13, color: "#E74C3C", fontWeight: 700 }}>
-          O valor será excluído da soma total.
-        </div>
-        <label style={{ fontSize: 10, color: "#7F8C8D", letterSpacing: ".1em", textTransform: "uppercase", fontWeight: 700, display: "block", marginBottom: 7 }}>Motivo *</label>
-        <textarea
-          className={`inp${err ? " inp-err" : ""}`}
-          style={{ minHeight: 76, resize: "none" }}
-          placeholder="Descreva o motivo…"
-          value={motivo}
-          onChange={e => { setMotivo(e.target.value); setErr(false); }} />
-        {err && <div style={{ fontSize: 11, color: "#E74C3C", marginTop: 4, fontWeight: 700 }}>Informe o motivo</div>}
-        <div style={{ height: 16 }} />
-        <button className="btn btn-del" onClick={confirmar} disabled={busy}>
-          {busy ? <><span className="spin" /> Excluindo…</> : "Confirmar Exclusão"}
-        </button>
-        <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
-      </div>
-    </div>
-  );
-}
-
-// ─── CAT CARD ─────────────────────────────────────────────────────────────────────
-function CatCard({ cat, val, total, sorted, RowComp }) {
-  const [open, setOpen] = useState(false);
-  const catItems = sorted.filter(t => t.categoria === cat);
-  return (
-    <div style={{ background: "#fff", borderRadius: 14, marginBottom: 10, overflow: "hidden", border: "1px solid #D5E8F5", boxShadow: "0 2px 8px rgba(41,128,185,0.07)" }}>
-      <div onClick={() => setOpen(o => !o)} style={{ padding: "14px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 10, height: 10, borderRadius: "50%", background: CAT_COR[cat] || "#999" }} />
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 800, color: "#1A5276" }}>{cat}</div>
-            <div style={{ fontSize: 11, color: "#A9B7C6", marginTop: 1 }}>{catItems.filter(t => !t.excluido).length} lançamentos</div>
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: "#1A5276" }}>{fmt(val)}</div>
-          <div style={{ color: "#A9B7C6", transition: "transform .2s", transform: open ? "rotate(180deg)" : "none" }}>▾</div>
-        </div>
-      </div>
-      {open && (
-        <div style={{ borderTop: "1px solid #EBF5FB", padding: "0 16px" }}>
-          <div style={{ padding: "8px 0 4px" }}>
-            <div style={{ background: "#E8F4FD", borderRadius: 4, height: 5, overflow: "hidden" }}>
-              <div style={{ width: `${total > 0 ? (val / total) * 100 : 0}%`, background: CAT_COR[cat] || "#999", height: "100%", borderRadius: 4 }} />
-            </div>
-            <div style={{ fontSize: 10, color: "#A9B7C6", marginTop: 4 }}>{total > 0 ? ((val / total) * 100).toFixed(1) : 0}% do total</div>
-          </div>
-          {catItems.map(t => <RowComp key={t.id} t={t} />)}
-        </div>
-      )}
-    </div>
-  );
-}
-
-
-// ─── CAIXA — LANÇAMENTO SEMANAL DE RECEITA ───────────────────────────────────────
-// Helpers da semana (Seg-Dom)
-function segDaSemanaCriar(dataStr) {
-  const d = new Date(dataStr + "T12:00:00");
-  const dow = d.getDay();
-  const seg = new Date(d);
-  seg.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
-  return seg.toISOString().slice(0, 10);
-}
-function domDaSemanaCriar(segStr) {
-  const d = new Date(segStr + "T12:00:00");
-  d.setDate(d.getDate() + 6);
-  return d.toISOString().slice(0, 10);
-}
-function labelSemana(segStr) {
-  const ini = new Date(segStr + "T12:00:00");
-  const fim = new Date(segStr + "T12:00:00");
-  fim.setDate(ini.getDate() + 6);
-  return `${ini.getDate()}/${ini.getMonth() + 1} a ${fim.getDate()}/${fim.getMonth() + 1}`;
-}
-
-// API receitas
-async function rcGet(mes) {
-  try {
-    const r = await fetch(`${SUPA_URL}/rest/v1/receitas?cliente_id=eq.${CID}&mes=eq.${mes}&order=semana.desc`, { headers: H });
-    return r.ok ? r.json() : [];
-  } catch { return []; }
-}
-async function rcPost(body) {
-  try {
-    const r = await fetch(`${SUPA_URL}/rest/v1/receitas`, { method: "POST", headers: H, body: JSON.stringify(body) });
-    return r.ok ? r.json() : null;
-  } catch { return null; }
-}
-async function rcPatch(id, body) {
-  try {
-    const r = await fetch(`${SUPA_URL}/rest/v1/receitas?id=eq.${id}`, { method: "PATCH", headers: { ...H, "Prefer": "return=minimal" }, body: JSON.stringify(body) });
-    return r.ok;
-  } catch { return false; }
-}
-async function rcDelete(id) {
-  try {
-    const r = await fetch(`${SUPA_URL}/rest/v1/receitas?id=eq.${id}`, { method: "DELETE", headers: H });
-    return r.ok;
-  } catch { return false; }
-}
-
-// Formulário de receita semanal
-function ReceitaForm({ mes, receita, onSaved, onClose }) {
-  const isEdit = !!receita;
-  const hoje = new Date().toISOString().slice(0, 10);
-  const [valor, setValor] = useState(isEdit ? String(receita.valor).replace(".", ",") : "");
-  const [semana, setSemana] = useState(isEdit ? receita.semana : segDaSemanaCriar(hoje));
-  const [obs, setObs] = useState(isEdit ? receita.obs || "" : "");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState({});
-
-  async function salvar() {
-    const v = parseFloat(valor.replace(",", "."));
-    const e = {};
-    if (!v || v <= 0) e.valor = true;
-    if (!semana) e.semana = true;
-    if (Object.keys(e).length) { setErr(e); return; }
-
-    setBusy(true);
-    const segReal = segDaSemanaCriar(semana);
-    const mesRef = segReal.slice(0, 7);
-    const payload = {
-      cliente_id: CID,
-      mes: mesRef,
-      semana: segReal,
-      valor: v,
-      obs: obs.trim(),
-      data_lancamento: hoje,
-    };
-    let ok;
-    if (isEdit) ok = await rcPatch(receita.id, payload);
-    else { payload.id = uid(); ok = await rcPost(payload); }
-    setBusy(false);
-    if (ok) { onSaved(); onClose(); }
-    else setErr({ geral: "Erro ao salvar." });
-  }
-
-  const LBL = { fontSize: 10, color: "#777", letterSpacing: ".12em", textTransform: "uppercase", fontWeight: 700, display: "block", marginBottom: 7 };
-
-  return (
-    <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="sheet">
-        <div className="handle" />
-        <div style={{ fontSize: 22, fontWeight: 900, color: "#1A5276", letterSpacing: ".04em", marginBottom: 4 }}>
-          {isEdit ? "Editar Receita" : "Nova Receita Semanal"}
-        </div>
-        <div style={{ fontSize: 12, color: "#888", marginBottom: 20 }}>Lance o total recebido na conta durante a semana</div>
-
-        {err.geral && <div style={{ background: "#FFF0F0", border: "1px solid #FFCCCC", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#CC0000", marginBottom: 14, fontWeight: 600 }}>{err.geral}</div>}
-
-        <div style={{ marginBottom: 16 }}>
-          <label style={LBL}>Valor recebido na semana (R$) *</label>
-          <input
-            className={`inp${err.valor ? " inp-err" : ""}`}
-            type="number" inputMode="decimal" placeholder="0,00"
-            value={valor}
-            onChange={e => { setValor(e.target.value); setErr(x => ({ ...x, valor: false })); }}
-            style={{ fontSize: 22, fontWeight: 800, color: "#27AE60" }} />
-          {err.valor && <div style={{ fontSize: 11, color: "#CC0000", marginTop: 4, fontWeight: 600 }}>Informe um valor válido</div>}
-        </div>
-
-        <div style={{ marginBottom: 20 }}>
-          <label style={LBL}>Semana de referência *</label>
-          <input
-            className={`inp${err.semana ? " inp-err" : ""}`}
-            type="date" value={semana}
-            onChange={e => { setSemana(e.target.value); setErr(x => ({ ...x, semana: false })); }} />
-          <div style={{ fontSize: 11, color: "#2980B9", marginTop: 6, fontWeight: 600 }}>
-            📅 Semana: {labelSemana(segDaSemanaCriar(semana))}
-          </div>
-        </div>
-
-        <div style={{ marginBottom: 20 }}>
-          <label style={LBL}>Observação</label>
-          <textarea className="inp" style={{ minHeight: 56, resize: "none", fontSize: 13 }} placeholder="Opcional" value={obs} onChange={e => setObs(e.target.value)} />
-        </div>
-
-        <button className="btn btn-main" style={{ background: "#2980B9", color: "#fff" }} onClick={salvar} disabled={busy}>
-          {busy ? <><span className="spin" /> Salvando</> : (isEdit ? "Salvar Alterações" : "Registrar Receita")}
-        </button>
-        <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
-      </div>
-    </div>
-  );
-}
-
-// Modal de exclusão
-function DelReceitaSheet({ receita, onDone, onClose }) {
-  const [busy, setBusy] = useState(false);
-  async function confirmar() {
-    setBusy(true);
-    const ok = await rcDelete(receita.id);
-    setBusy(false);
-    if (ok) { onDone(); onClose(); }
-  }
-  return (
-    <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="sheet">
-        <div className="handle" />
-        <div style={{ fontSize: 20, fontWeight: 900, color: "#CC0000", marginBottom: 8 }}>Excluir Receita</div>
-        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>{fmt(receita.valor)}</div>
-        <div style={{ fontSize: 13, color: "#888", marginBottom: 18 }}>Semana: {labelSemana(receita.semana)}</div>
-        <div style={{ background: "#FFF8F8", border: "1px solid #FFCCCC", borderRadius: 10, padding: "12px 14px", marginBottom: 18, fontSize: 13, color: "#CC0000", fontWeight: 600 }}>Esta ação não pode ser desfeita.</div>
-        <button className="btn" style={{ background: "#CC0000", color: "#fff", border: "none" }} onClick={confirmar} disabled={busy}>{busy ? <><span className="spin" /> Excluindo</> : "Confirmar Exclusão"}</button>
-        <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
-      </div>
-    </div>
-  );
-}
-
-// View principal da Caixa
-function CaixaView({ mes, despesasEmpresa }) {
-  const [subView, setSubView] = useState("lancar");
-  const [receitas, setReceitas] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [editReceita, setEditReceita] = useState(null);
-  const [delReceita, setDelReceita] = useState(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    const d = await rcGet(mes);
-    setReceitas(d || []);
-    setLoading(false);
-  }, [mes]);
-
-  useEffect(() => { setReceitas([]); load(); }, [load]);
-  useEffect(() => {
-    if (showForm || editReceita || delReceita) return;
-    const t = setInterval(() => { rcGet(mes).then(d => setReceitas(d || [])); }, 5000);
-    return () => clearInterval(t);
-  }, [mes, showForm, editReceita, delReceita]);
-
-  const totalReceita = receitas.reduce((s, r) => s + r.valor, 0);
-  const totalDespesa = despesasEmpresa.reduce((s, d) => s + d.valor, 0);
-  const lucro = totalReceita - totalDespesa;
-  const margem = totalReceita > 0 ? (lucro / totalReceita) * 100 : 0;
-
-  return (
-    <div>
-      {/* Sub-tabs */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        {[["lancar", "Lançar"], ["receitas", "Receitas"], ["resultado", "Resultado"]].map(([v, l]) => (
-          <button key={v} onClick={() => setSubView(v)}
-            style={{
-              flex: 1, border: "none", borderRadius: 8, padding: "9px 4px", fontSize: 12,
-              fontWeight: 700, cursor: "pointer", transition: "all .18s",
-              background: subView === v ? "#2980B9" : "#fff",
-              color: subView === v ? "#fff" : "#888",
-              boxShadow: subView === v ? "0 2px 8px rgba(41,128,185,.3)" : "0 1px 3px rgba(0,0,0,.06)",
-            }}>{l}</button>
-        ))}
-      </div>
-
-      {loading && <div style={{ textAlign: "center", padding: 40 }}><span className="spin" /></div>}
-
-      {/* LANÇAR */}
-      {subView === "lancar" && !loading && (
-        <>
-          <div style={{ background: "#fff", borderRadius: 14, padding: "22px 20px", marginBottom: 16, boxShadow: "0 2px 12px rgba(41,128,185,0.08)", borderLeft: "4px solid #27AE60" }}>
-            <div style={{ fontSize: 10, color: "#A9B7C6", letterSpacing: ".18em", textTransform: "uppercase", marginBottom: 4, fontWeight: 600 }}>Total Receitas — {ML[mes]}</div>
-            <div style={{ fontSize: 36, fontWeight: 900, color: "#1E8449", lineHeight: 1, marginBottom: 6 }}>{fmt(totalReceita)}</div>
-            <div style={{ fontSize: 12, color: "#A9B7C6", letterSpacing: ".08em", textTransform: "uppercase" }}>{receitas.length} semana(s) lançada(s)</div>
-          </div>
-
-          <button onClick={() => setShowForm(true)}
-            style={{ width: "100%", background: "#27AE60", color: "#fff", border: "none", borderRadius: 12, padding: "16px 20px", fontSize: 14, fontWeight: 800, letterSpacing: ".1em", textTransform: "uppercase", cursor: "pointer", boxShadow: "0 4px 14px rgba(39,174,96,0.3)", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 18 }}>
-            <span style={{ fontSize: 22, lineHeight: 1 }}>+</span> Nova Receita Semanal
-          </button>
-
-          {receitas.length > 0 && (
-            <>
-              <div style={{ fontSize: 10, color: "#A9B7C6", letterSpacing: ".18em", textTransform: "uppercase", marginBottom: 10, fontWeight: 600 }}>Últimos lançamentos</div>
-              <div style={{ background: "#fff", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 6px rgba(0,0,0,.05)" }}>
-                {receitas.slice(0, 5).map((r, i) => (
-                  <div key={r.id} style={{ padding: "12px 16px", borderBottom: i < Math.min(receitas.length, 5) - 1 ? "1px solid #F0F0F0" : "none", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: "#1A5276" }}>{labelSemana(r.semana)}</div>
-                      {r.obs && <div style={{ fontSize: 11, color: "#888", marginTop: 2, fontStyle: "italic" }}>{r.obs}</div>}
-                    </div>
-                    <div style={{ fontSize: 16, fontWeight: 800, color: "#1E8449" }}>{fmt(r.valor)}</div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-
-          {receitas.length === 0 && (
-            <div style={{ background: "#fff", borderRadius: 12, padding: "32px 20px", textAlign: "center", boxShadow: "0 1px 6px rgba(0,0,0,.06)" }}>
-              <div style={{ fontSize: 32, marginBottom: 10 }}>💰</div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "#1A5276", marginBottom: 6 }}>Nenhuma receita lançada</div>
-              <div style={{ fontSize: 13, color: "#888", lineHeight: 1.5 }}>Toque em "Nova Receita Semanal" para começar.</div>
-            </div>
-          )}
-        </>
-      )}
-
-      {/* RECEITAS — lista completa */}
-      {subView === "receitas" && !loading && (
-        <>
-          <div style={{ fontSize: 10, color: "#A9B7C6", letterSpacing: ".18em", textTransform: "uppercase", marginBottom: 14, fontWeight: 600 }}>{receitas.length} receita(s) — {fmt(totalReceita)}</div>
-          {receitas.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "40px 0", color: "#CCC", fontSize: 14 }}>Nenhuma receita lançada neste mês.</div>
-          ) : (
-            <div style={{ background: "#fff", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 6px rgba(0,0,0,.05)" }}>
-              {receitas.map((r, i) => (
-                <div key={r.id} style={{ padding: "14px 16px", borderBottom: i < receitas.length - 1 ? "1px solid #F0F0F0" : "none", display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ width: 4, height: 32, background: "#27AE60", borderRadius: 2, flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#1A5276" }}>{labelSemana(r.semana)}</div>
-                    {r.obs && <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>{r.obs}</div>}
-                  </div>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: "#1E8449" }}>{fmt(r.valor)}</div>
-                  <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                    <button onClick={() => setEditReceita(r)} title="Editar"
-                      style={{ background: "none", border: "1px solid #EEE", borderRadius: 6, width: 28, height: 28, cursor: "pointer", color: "#888", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>✎</button>
-                    <button onClick={() => setDelReceita(r)} title="Excluir"
-                      style={{ background: "none", border: "1px solid #EEE", borderRadius: 6, width: 28, height: 28, cursor: "pointer", color: "#888", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* RESULTADO */}
-      {subView === "resultado" && !loading && (
-        <>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-            <div style={{ background: "#fff", borderRadius: 14, padding: "16px", boxShadow: "0 1px 6px rgba(0,0,0,.06)", borderLeft: "4px solid #27AE60" }}>
-              <div style={{ fontSize: 9, color: "#A9B7C6", letterSpacing: ".18em", textTransform: "uppercase", fontWeight: 600, marginBottom: 4 }}>Receita</div>
-              <div style={{ fontSize: 24, fontWeight: 900, color: "#1E8449", lineHeight: 1 }}>{fmt(totalReceita)}</div>
-              <div style={{ fontSize: 11, color: "#AAA", marginTop: 4 }}>{receitas.length} semana(s)</div>
-            </div>
-            <div style={{ background: "#fff", borderRadius: 14, padding: "16px", boxShadow: "0 1px 6px rgba(0,0,0,.06)", borderLeft: "4px solid #CC0000" }}>
-              <div style={{ fontSize: 9, color: "#A9B7C6", letterSpacing: ".18em", textTransform: "uppercase", fontWeight: 600, marginBottom: 4 }}>Despesas</div>
-              <div style={{ fontSize: 24, fontWeight: 900, color: "#CC0000", lineHeight: 1 }}>{fmt(totalDespesa)}</div>
-              <div style={{ fontSize: 11, color: "#AAA", marginTop: 4 }}>{despesasEmpresa.length} lançamento(s)</div>
-            </div>
-          </div>
-
-          <div style={{ background: lucro >= 0 ? "#F0FFF8" : "#FFF5F5", borderRadius: 16, padding: "22px 20px", marginBottom: 14, border: `2px solid ${lucro >= 0 ? "#27AE60" : "#CC0000"}33` }}>
-            <div style={{ fontSize: 10, color: lucro >= 0 ? "#27AE60" : "#CC0000", letterSpacing: ".18em", textTransform: "uppercase", marginBottom: 6, fontWeight: 700 }}>{lucro >= 0 ? "Lucro do Mês" : "Prejuízo do Mês"}</div>
-            <div style={{ fontSize: 36, fontWeight: 900, color: lucro >= 0 ? "#1E8449" : "#CC0000", lineHeight: 1, marginBottom: 8 }}>{lucro >= 0 ? "+ " : "- "}{fmt(Math.abs(lucro))}</div>
-            <div style={{ fontSize: 12, color: "#888" }}>{fmt(totalReceita)} − {fmt(totalDespesa)} {totalReceita > 0 && `· Margem ${margem.toFixed(1)}%`}</div>
-          </div>
-
-          {totalReceita > 0 && (
-            <div style={{ background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 1px 6px rgba(0,0,0,.05)" }}>
-              <div style={{ fontSize: 11, color: "#A9B7C6", letterSpacing: ".12em", textTransform: "uppercase", fontWeight: 700, marginBottom: 12 }}>Composição</div>
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                  <span style={{ fontSize: 12, color: "#27AE60", fontWeight: 700 }}>Receita</span>
-                  <span style={{ fontSize: 13, fontWeight: 800, color: "#1E8449" }}>{fmt(totalReceita)}</span>
-                </div>
-                <div style={{ height: 8, borderRadius: 4, background: "#F0F0F0", overflow: "hidden" }}>
-                  <div style={{ width: "100%", height: "100%", background: "#27AE60", borderRadius: 4 }} />
-                </div>
-              </div>
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                  <span style={{ fontSize: 12, color: "#CC0000", fontWeight: 700 }}>Despesas</span>
-                  <span style={{ fontSize: 13, fontWeight: 800, color: "#CC0000" }}>{fmt(totalDespesa)}</span>
-                </div>
-                <div style={{ height: 8, borderRadius: 4, background: "#F0F0F0", overflow: "hidden" }}>
-                  <div style={{ width: `${Math.min((totalDespesa / totalReceita) * 100, 100)}%`, height: "100%", background: "#CC0000", borderRadius: 4 }} />
-                </div>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      {showForm && <ReceitaForm mes={mes} receita={null} onSaved={load} onClose={() => setShowForm(false)} />}
-      {editReceita && <ReceitaForm mes={mes} receita={editReceita} onSaved={load} onClose={() => setEditReceita(null)} />}
-      {delReceita && <DelReceitaSheet receita={delReceita} onDone={load} onClose={() => setDelReceita(null)} />}
-    </div>
-  );
-}
-
-
-// ─── APP ─────────────────────────────────────────────────────────────────────────
-export default function AppCriar() {
-  const [mesIdx,    setMesIdx]    = useState(IDX_ATUAL);
-  const [items,     setItems]     = useState([]);
-  const [loading,   setLoading]   = useState(true);
-  const [view,      setView]      = useState("inicio");
-  const [showForm,  setShowForm]  = useState(false);
-  const [showPend,  setShowPend]  = useState(false);
-  const [del,       setDel]       = useState(null);
-  const [editItem,  setEditItem]  = useState(null);
-  const [toast,     setToast]     = useState(null);
-  const [prevItems, setPrevItems] = useState([]);
-
-  const mes    = MESES[mesIdx];
-  const mesAnt = mesIdx > 0 ? MESES[mesIdx - 1] : null;
-
-  const load = async (silent = false) => {
-    if (!silent) setLoading(true);
-    const d = await sbGet(mes);
-    setItems(d || []);
-    if (!silent) setLoading(false);
+  const lancar=()=>{
+    const e=validar(form);
+    if(Object.keys(e).length){setErro(e);return;}
+    const novo={id:Date.now(),descricao:form.descricao.trim(),valor:d2float(form.valorDigits),categoria:form.categoria,classe:"Empresa",meio:form.meio,data:form.data,obs:form.obs,excluido:false,motivoExclusao:"",recorrente:form.recorrente};
+    setItems(p=>[...p,novo]);
+    inserirRecorrentes(novo,form);
+    setShowForm(false);
+    showToast(form.recorrente?`✓ Registrado + ${form.repeticoes}x inserido(s) automaticamente`:"✓ Lançamento registrado");
   };
 
-  const loadPrev = async () => {
-    if (!mesAnt) { setPrevItems([]); return; }
-    const d = await sbGet(mesAnt);
-    setPrevItems(d || []);
+  const openEdit=item=>{
+    setForm({descricao:item.descricao,valorDigits:float2d(item.valor),categoria:item.categoria,meio:item.meio,data:item.data,obs:item.obs||"",recorrente:false,periodicidade:"Mensal",diaVencimento:"",repeticoes:null});
+    setErro({});setEditItem(item);
   };
 
-  useEffect(() => { setItems([]); load(); loadPrev(); }, [mes]);
-  useEffect(() => {
-    // Não recarrega enquanto algum modal estiver aberto
-    if (showForm || del || editItem || showPend) return;
-    const t = setInterval(() => load(true), 5000);
-    return () => clearInterval(t);
-  }, [mes, showForm, del, editItem, showPend]);
+  const salvarEdicao=()=>{
+    const e=validar(form);
+    if(Object.keys(e).length){setErro(e);return;}
+    setItems(p=>p.map(t=>t.id===editItem.id?{...t,descricao:form.descricao.trim(),valor:d2float(form.valorDigits),categoria:form.categoria,meio:form.meio,data:form.data,obs:form.obs}:t));
+    setEditItem(null);showToast("✓ Lançamento atualizado");
+  };
 
-  const showToast = m => { setToast(m); setTimeout(() => setToast(null), 2500); };
+  const confirmarExclusao=()=>{
+    if(!motivoExc.trim()){setMotivoErr(true);return;}
+    setItems(p=>p.map(t=>t.id===delItem.id?{...t,excluido:true,motivoExclusao:motivoExc.trim()}:t));
+    setDelItem(null);setMotivoExc("");setMotivoErr(false);showToast("Lançamento excluído");
+  };
 
-  const ativos   = useMemo(() => items.filter(t => !t.excluido), [items]);
-  const total    = useMemo(() => ativos.reduce((s, t) => s + t.valor, 0), [ativos]);
-  const sorted   = useMemo(() => [...items].sort((a, b) => b.data.localeCompare(a.data)), [items]);
+  const anyModal=showForm||!!editItem||!!delItem;
+  const card={background:"#fff",borderRadius:14,padding:"4px 16px",boxShadow:"0 2px 8px #2980B910",marginBottom:12};
+  const rowDiv=last=>({padding:"13px 0",borderBottom:last?"none":"1px solid #EBF5FB",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10});
 
-  // Comparativo com mês anterior
-  const maxDia   = useMemo(() => { const d = items.map(t => parseInt(t.data.slice(8, 10))); return d.length ? Math.max(...d) : 31; }, [items]);
-  const totalAnt = useMemo(() => prevItems.filter(t => !t.excluido && parseInt(t.data.slice(8, 10)) <= maxDia).reduce((s, t) => s + t.valor, 0), [prevItems, maxDia]);
-
-  const byCat = useMemo(() => {
-    const m = {};
-    ativos.forEach(t => { m[t.categoria] = (m[t.categoria] || 0) + t.valor; });
-    return Object.entries(m).map(([cat, val]) => ({ cat, val })).sort((a, b) => b.val - a.val);
-  }, [ativos]);
-
-  // Pendências recorrentes
-  const pendencias = useMemo(() => {
-    if (!mesAnt) return [];
-    return prevItems
-      .filter(t => t.recorrente && !t.excluido)
-      .filter(base => !items.some(t => t.descricao === base.descricao && !t.excluido));
-  }, [items, prevItems, mesAnt]);
-
-  const Row = ({ t, showEdit = false }) => (
-    <div className="row" style={{ opacity: t.excluido ? 0.4 : 1 }}>
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flex: 1, minWidth: 0 }}>
-        <div style={{ width: 4, height: 36, background: t.excluido ? "#D5E8F5" : (CAT_COR[t.categoria] || "#999"), borderRadius: 3, flexShrink: 0 }} />
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: t.excluido ? "#A9B7C6" : "#1A5276", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: t.excluido ? "line-through" : "none" }}>
-            {t.descricao}
-            {t.recorrente && !t.excluido && <span className="badge-rec">↻ REC</span>}
+  const LancRow=({t,last,showEdit})=>(
+    <div className={`row-item${t.excluido?" row-excluido":""}`} style={rowDiv(last)}>
+      <div style={{display:"flex",gap:10,alignItems:"center",flex:1,minWidth:0}}>
+        <div style={{width:4,height:t.excluido?16:40,background:t.excluido?"#ddd":CAT_CORES[t.categoria]||"#999",borderRadius:3,flexShrink:0}}/>
+        <div style={{minWidth:0}}>
+          <div style={{fontSize:14,color:t.excluido?"#aaa":"#1A5276",fontWeight:700,fontFamily:"'Nunito',sans-serif",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",textDecoration:t.excluido?"line-through":"none"}}>{t.descricao}</div>
+          <div style={{display:"flex",gap:6,alignItems:"center",marginTop:2,flexWrap:"wrap"}}>
+            <span style={{fontSize:11,color:"#A9B7C6",fontFamily:"'Nunito',sans-serif"}}>{fmtDate(t.data)} · {t.categoria} · {t.meio}</span>
+            {t.recorrente&&!t.excluido&&<span className="badge" style={{background:"#EBF5FB",color:"#2980B9",border:"1px solid #AED6F1"}}>↻ Recorrente</span>}
           </div>
-          <div style={{ fontSize: 11, color: "#A9B7C6", marginTop: 2 }}>
-            {fd(t.data)} · {t.categoria} · {t.meio}
-          </div>
-          {t.obs && !t.excluido && (
-            <div style={{ fontSize: 11, color: "#A9B7C6", marginTop: 1, fontStyle: "italic" }}>{t.obs}</div>
-          )}
-          {t.excluido && <span className="badge-exc">Valor excluído da soma</span>}
+          {t.obs&&!t.excluido&&<div style={{fontSize:11,color:"#A9B7C6",marginTop:1,fontStyle:"italic",fontFamily:"'Nunito',sans-serif"}}>{t.obs}</div>}
+          {t.excluido&&<span className="badge" style={{background:"#FDEDEC",color:"#E74C3C",border:"1px solid #F1948A"}}>Valor excluído da soma de valores</span>}
         </div>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-        <div style={{ fontSize: 15, fontWeight: 800, color: t.excluido ? "#BDC3C7" : "#1A5276" }}>{fmt(t.valor)}</div>
-        {!t.excluido && showEdit && (
-          <button
-            onClick={() => setEditItem(t)}
-            style={{ background: "none", border: "1px solid #D5E8F5", borderRadius: 6, width: 26, height: 26, cursor: "pointer", color: "#A9B7C6", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", transition: "all .15s", flexShrink: 0 }}
-            onMouseEnter={e => e.currentTarget.style.color = "#2980B9"}
-            onMouseLeave={e => e.currentTarget.style.color = "#A9B7C6"}>
-            ✎
-          </button>
-        )}
-        {!t.excluido && !showEdit && (
-          <button
-            onClick={() => setDel(t)}
-            style={{ background: "none", border: "1px solid #D5E8F5", borderRadius: 6, width: 26, height: 26, cursor: "pointer", color: "#A9B7C6", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", transition: "all .15s", flexShrink: 0 }}
-            onMouseEnter={e => e.currentTarget.style.color = "#E74C3C"}
-            onMouseLeave={e => e.currentTarget.style.color = "#A9B7C6"}>
-            ✕
+      <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+        <div style={{fontSize:15,fontWeight:800,color:t.excluido?"#bbb":"#1A5276",fontFamily:"'Nunito',sans-serif"}}>{fmt(t.valor)}</div>
+        {showEdit&&!t.excluido&&!isFechado&&(
+          <button className="icon-btn" onClick={()=>openEdit(t)}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
           </button>
         )}
       </div>
     </div>
   );
 
-  // Modal editar
-  const EditSheet = ({ item, onDone, onClose }) => {
-    const [cat,  setCat]  = useState(item.categoria);
-    const [desc, setDesc] = useState(item.descricao);
-    const [val,  setVal]  = useState(String(item.valor));
-    const [meio, setMeio] = useState(item.meio);
-    const [data, setData] = useState(item.data);
-    const [obs,  setObs]  = useState(item.obs || "");
-    const [busy, setBusy] = useState(false);
-    const [delMode, setDelMode] = useState(false);
-    const [motivo, setMotivo]   = useState("");
-    const [mErr,   setMErr]     = useState(false);
-
-    const salvar = async () => {
-      const v = parseFloat(val.replace(",", "."));
-      if (!cat || !desc.trim() || !v || !data) return;
-      setBusy(true);
-      await sbPatch(item.id, { categoria: cat, descricao: desc.trim(), valor: v, meio, data, obs });
-      setBusy(false);
-      onDone();
-      onClose();
-    };
-
-    const excluir = async () => {
-      if (!motivo.trim()) { setMErr(true); return; }
-      setBusy(true);
-      await sbPatch(item.id, { excluido: true, motivo_exclusao: motivo.trim() });
-      setBusy(false);
-      onDone();
-      onClose();
-    };
-
-    const LBL = { fontSize: 10, color: "#7F8C8D", letterSpacing: ".1em", textTransform: "uppercase", fontWeight: 700, display: "block", marginBottom: 7 };
-
-    return (
-      <div className="overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-        <div className="sheet">
-          <div className="handle" />
-          {!delMode ? (
-            <>
-              <div style={{ fontSize: 20, fontWeight: 900, color: "#1A5276", marginBottom: 20 }}>Editar Lançamento</div>
-              <div style={{ marginBottom: 14 }}>
-                <label style={LBL}>Categoria</label>
-                <select className="inp" value={cat} onChange={e => setCat(e.target.value)}>
-                  {CATEGORIAS.map(c => <option key={c}>{c}</option>)}
-                </select>
-              </div>
-              <div style={{ marginBottom: 14 }}>
-                <label style={LBL}>Descrição</label>
-                <input className="inp" value={desc} onChange={e => setDesc(e.target.value)} />
-              </div>
-              <div style={{ marginBottom: 14 }}>
-                <label style={LBL}>Valor (R$)</label>
-                <input className="inp" type="number" inputMode="decimal" value={val} onChange={e => setVal(e.target.value)} />
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-                <div>
-                  <label style={LBL}>Meio</label>
-                  <select className="inp" value={meio} onChange={e => setMeio(e.target.value)}>
-                    {MEIOS.map(m => <option key={m}>{m}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={LBL}>Data</label>
-                  <input className="inp" type="date" value={data} onChange={e => setData(e.target.value)} />
-                </div>
-              </div>
-              <div style={{ marginBottom: 20 }}>
-                <label style={LBL}>Observação</label>
-                <textarea className="inp" style={{ minHeight: 56, resize: "none", fontSize: 13 }} value={obs} onChange={e => setObs(e.target.value)} />
-              </div>
-              <button className="btn btn-main" onClick={salvar} disabled={busy}>
-                {busy ? <><span className="spin" /> Salvando…</> : "✓ Salvar Alterações"}
-              </button>
-              <button className="btn btn-del" onClick={() => setDelMode(true)}>Excluir Lançamento</button>
-              <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
-            </>
-          ) : (
-            <>
-              <div style={{ fontSize: 18, fontWeight: 900, color: "#E74C3C", marginBottom: 6 }}>Excluir Lançamento</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#1A5276", marginBottom: 2 }}>{item.descricao}</div>
-              <div style={{ fontSize: 13, color: "#A9B7C6", marginBottom: 18 }}>{fmt(item.valor)} · {fd(item.data)}</div>
-              <div style={{ background: "#FDEDEC", border: "1px solid #F1948A44", borderRadius: 10, padding: "12px 14px", marginBottom: 18, fontSize: 13, color: "#E74C3C", fontWeight: 700 }}>
-                O valor será excluído da soma total.
-              </div>
-              <label style={LBL}>Motivo *</label>
-              <textarea className={`inp${mErr ? " inp-err" : ""}`} style={{ minHeight: 76, resize: "none" }}
-                placeholder="Descreva o motivo…" value={motivo}
-                onChange={e => { setMotivo(e.target.value); setMErr(false); }} />
-              {mErr && <div style={{ fontSize: 11, color: "#E74C3C", marginTop: 4, fontWeight: 700 }}>Informe o motivo</div>}
-              <div style={{ height: 16 }} />
-              <button className="btn btn-del" onClick={excluir} disabled={busy}>
-                {busy ? <><span className="spin" /> Excluindo…</> : "Confirmar Exclusão"}
-              </button>
-              <button className="btn btn-ghost" onClick={() => setDelMode(false)}>Voltar</button>
-            </>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  const anyModal = showForm || !!del || !!editItem;
-
   return (
-    <div style={{ background: "#F0F6FF", minHeight: "100vh", maxWidth: 480, margin: "0 auto" }}>
+    <div style={{fontFamily:"'Nunito',sans-serif",background:"#F0F6FF",minHeight:"100vh",color:"#1A5276",maxWidth:480,margin:"0 auto"}}>
       <style>{CSS}</style>
 
       {/* HEADER */}
-      <div style={{ background: "#fff", borderBottom: "1px solid #D5E8F5", padding: "14px 20px 0", position: "sticky", top: 0, zIndex: 50, boxShadow: "0 2px 12px rgba(41,128,185,0.08)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-          <svg width="46" height="46" viewBox="0 0 100 100" fill="none">
-            <circle cx="50" cy="50" r="50" fill="white" />
-            {[{ color: "#E67E22", rot: 0 }, { color: "#8E44AD", rot: -72 }, { color: "#2980B9", rot: 72 }, { color: "#27AE60", rot: -144 }, { color: "#E91E8C", rot: 144 }].map(({ color, rot }, i) => (
-              <g key={i} transform={`rotate(${rot} 50 50)`}>
-                <ellipse cx="50" cy="24" rx="9" ry="13" fill={color} />
-                <ellipse cx="43" cy="14" rx="2.2" ry="5" fill={color} transform="rotate(-15 43 14)" />
-                <ellipse cx="47" cy="12" rx="2.2" ry="5" fill={color} transform="rotate(-5 47 12)" />
-                <ellipse cx="51" cy="12" rx="2.2" ry="5" fill={color} transform="rotate(5 51 12)" />
-                <ellipse cx="55" cy="13" rx="2.2" ry="5" fill={color} transform="rotate(15 55 13)" />
-              </g>
-            ))}
-            <text x="50" y="52" textAnchor="middle" fontFamily="Nunito,sans-serif" fontSize="9" fontWeight="900" fill="#1A5276" letterSpacing="2">CRIAR</text>
-          </svg>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 18, fontWeight: 900, color: "#1A5276", lineHeight: 1 }}>CRIAR</div>
-            <div style={{ fontSize: 11, color: "#A9B7C6", letterSpacing: ".12em", textTransform: "uppercase", fontWeight: 600 }}>Centro Educacional</div>
+      <div style={{background:"#fff",borderBottom:"1px solid #D5E8F5",padding:"12px 20px 0",position:"sticky",top:0,zIndex:50,boxShadow:"0 2px 12px #2980B910"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+          <Logo size={46}/>
+          <div style={{flex:1}}>
+            <div style={{fontSize:18,fontWeight:900,color:"#1A5276",lineHeight:1.1}}>CRIAR</div>
+            <div style={{fontSize:11,color:"#A9B7C6",letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:600}}>Centro Educacional</div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {loading && <span className="spin" />}
-            <button className={`notif-btn${pendencias.length > 0 ? " has-pending" : ""}`} onClick={() => setShowPend(o => !o)}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              </svg>
-              {pendencias.length > 0 && <span className="notif-dot">{pendencias.length}</span>}
+          <button className={`notif-btn${pendencias.length>0?" has-pending":""}`} onClick={()=>setShowPend(o=>!o)} title="Recorrências pendentes">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+            {pendencias.length>0&&<span className="notif-dot">{pendencias.length}</span>}
+          </button>
+        </div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:12,paddingBottom:6,position:"relative"}}>
+          <button className="arrow-btn" disabled={mesIdx===0} onClick={()=>goMes(-1)}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <div style={{position:"relative"}}>
+            <button className="mes-btn" onClick={()=>setShowPicker(o=>!o)}>
+              {mesAtual.label}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2980B9" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
+            {showPicker&&<MonthPicker mesAtual={mesAtual.mes} onSelect={k=>{const i=MESES.findIndex(m=>m.mes===k);if(i>=0)setMesIdx(i);}} onClose={()=>setShowPicker(false)}/>}
+          </div>
+          <button className="arrow-btn" disabled={mesIdx===MESES.length-1} onClick={()=>goMes(1)}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+          <div style={{position:"absolute",right:0,display:"flex",gap:4}}>
+            {isFechado&&<span className="badge" style={{background:"#F2F3F4",color:"#7F8C8D",border:"1px solid #D5D8DC"}}>Fechado</span>}
+            {!isFechado&&items.length>0&&<span className="badge" style={{background:"#FEF9E7",color:"#D68910",border:"1px solid #F9E79F"}}>Parcial</span>}
           </div>
         </div>
-
-        {/* Mês */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, background: "#F8FBFF", borderRadius: 10, padding: "6px 10px", border: "1px solid #D5E8F5" }}>
-          <button onClick={() => setMesIdx(i => Math.max(0, i - 1))} disabled={mesIdx === 0}
-            style={{ background: "none", border: "none", color: mesIdx === 0 ? "#D5E8F5" : "#7F8C8D", cursor: mesIdx === 0 ? "not-allowed" : "pointer", fontSize: 20, lineHeight: 1, padding: "0 4px" }}>‹</button>
-          <div style={{ flex: 1, textAlign: "center", fontSize: 14, fontWeight: 800, color: "#1A5276" }}>{ML[mes]}</div>
-          <button onClick={() => setMesIdx(i => Math.min(MESES.length - 1, i + 1))} disabled={mesIdx === MESES.length - 1}
-            style={{ background: "none", border: "none", color: mesIdx === MESES.length - 1 ? "#D5E8F5" : "#7F8C8D", cursor: mesIdx === MESES.length - 1 ? "not-allowed" : "pointer", fontSize: 20, lineHeight: 1, padding: "0 4px" }}>›</button>
-        </div>
-
-        <div style={{ display: "flex", borderBottom: "1px solid #EBF5FB" }}>
-          {[["caixa", "Caixa"], ["inicio", "Início"], ["historico", "Histórico"], ["categorias", "Categorias"]].map(([v, l]) => (
-            <button key={v} className={`tab-b${view === v ? " on" : ""}`} onClick={() => setView(v)}>{l}</button>
+        <nav style={{display:"flex",marginTop:2}}>
+          {[["inicio","Início"],["categorias","Categorias"],["historico","Histórico"]].map(([v,l])=>(
+            <button key={v} className="tab" onClick={()=>setView(v)}
+              style={{flex:1,background:"none",border:"none",borderBottom:view===v?"2.5px solid #2980B9":"2.5px solid transparent",color:view===v?"#2980B9":"#A9B7C6",padding:"10px 4px",fontSize:12,letterSpacing:"0.1em",textTransform:"uppercase",cursor:"pointer",fontFamily:"'Nunito',sans-serif",fontWeight:800,transition:"all .2s"}}>
+              {l}
+            </button>
           ))}
-        </div>
+        </nav>
       </div>
 
       {/* PENDÊNCIAS */}
-      {showPend && (
-        <div className="overlay-top" onClick={e => { if (e.target === e.currentTarget) setShowPend(false); }}>
+      {showPend&&(
+        <div className="overlay-top" onClick={e=>{if(e.target===e.currentTarget)setShowPend(false);}}>
           <div className="sheet-top">
-            <div style={{ padding: "18px 20px 12px", borderBottom: "1px solid #EBF5FB", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, background: "#fff", borderRadius: "20px 20px 0 0" }}>
+            <div style={{padding:"18px 20px 12px",borderBottom:"1px solid #EBF5FB",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,background:"#fff",borderRadius:"20px 20px 0 0"}}>
               <div>
-                <div style={{ fontSize: 16, fontWeight: 900, color: "#1A5276" }}>Despesas Recorrentes</div>
-                <div style={{ fontSize: 11, color: "#A9B7C6", marginTop: 1 }}>{ML[mes]} · {pendencias.length === 0 ? "tudo em dia!" : `${pendencias.length} pendente(s)`}</div>
+                <div style={{fontSize:16,fontWeight:900,color:"#1A5276",fontFamily:"'Nunito',sans-serif"}}>Despesas Recorrentes</div>
+                <div style={{fontSize:11,color:"#A9B7C6",marginTop:1,fontFamily:"'Nunito',sans-serif"}}>{mesAtual.label} · {pendencias.length===0?"tudo em dia!":"pendente(s) de lançamento"}</div>
               </div>
-              <button onClick={() => setShowPend(false)} style={{ background: "none", border: "none", color: "#aaa", fontSize: 20, cursor: "pointer" }}>✕</button>
+              <button onClick={()=>setShowPend(false)} style={{background:"none",border:"none",color:"#aaa",fontSize:20,cursor:"pointer"}}>✕</button>
             </div>
-            {pendencias.length === 0 ? (
-              <div style={{ padding: "28px 20px", textAlign: "center" }}>
-                <div style={{ fontSize: 36, marginBottom: 8 }}>✓</div>
-                <div style={{ fontSize: 14, color: "#1A5276", fontWeight: 800 }}>Tudo em dia!</div>
-                <div style={{ fontSize: 12, color: "#A9B7C6", marginTop: 4 }}>Nenhuma recorrência pendente para {ML[mes]}</div>
+            {pendencias.length===0?(
+              <div style={{padding:"28px 20px",textAlign:"center"}}>
+                <div style={{fontSize:36,marginBottom:8}}>✓</div>
+                <div style={{fontSize:14,color:"#1A5276",fontWeight:800,fontFamily:"'Nunito',sans-serif"}}>Tudo em dia!</div>
+                <div style={{fontSize:12,color:"#A9B7C6",marginTop:4,fontFamily:"'Nunito',sans-serif"}}>Nenhuma recorrência pendente para {mesAtual.label}</div>
               </div>
-            ) : pendencias.map(p => (
+            ):pendencias.map(p=>(
               <div key={p.id} className="pend-item">
-                <div style={{ display: "flex", gap: 10, alignItems: "center", flex: 1, minWidth: 0 }}>
-                  <div style={{ width: 4, height: 36, background: CAT_COR[p.categoria] || "#999", borderRadius: 3, flexShrink: 0 }} />
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 14, color: "#1A5276", fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.descricao}</div>
-                    <div style={{ fontSize: 11, color: "#A9B7C6", marginTop: 2 }}>{p.categoria} · {p.meio}</div>
+                <div style={{display:"flex",gap:10,alignItems:"center",flex:1,minWidth:0}}>
+                  <div style={{width:4,height:36,background:CAT_CORES[p.categoria]||"#999",borderRadius:3,flexShrink:0}}/>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:14,color:"#1A5276",fontWeight:700,fontFamily:"'Nunito',sans-serif",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.descricao}</div>
+                    <div style={{fontSize:11,color:"#A9B7C6",marginTop:2,fontFamily:"'Nunito',sans-serif"}}>{p.categoria} · {p.meio}</div>
                   </div>
                 </div>
-                <div style={{ textAlign: "right", flexShrink: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: "#1A5276" }}>{fmt(p.valor)}</div>
-                  <div style={{ fontSize: 10, color: "#E67E22", fontWeight: 700, marginTop: 2 }}>↻ RECORRENTE</div>
+                <div style={{textAlign:"right",flexShrink:0}}>
+                  <div style={{fontSize:15,fontWeight:800,color:"#1A5276",fontFamily:"'Nunito',sans-serif"}}>{fmt(p.valor)}</div>
+                  <div style={{fontSize:10,color:"#E67E22",fontWeight:700,marginTop:2,fontFamily:"'Nunito',sans-serif"}}>↻ RECORRENTE</div>
                 </div>
               </div>
             ))}
@@ -1064,118 +627,130 @@ export default function AppCriar() {
       )}
 
       {/* CONTEÚDO */}
-      <div style={{ padding: "20px 16px 100px" }}>
-
-        {/* CAIXA */}
-        {view === "caixa" && <CaixaView mes={mes} despesasEmpresa={ativos} />}
-
-        {/* INÍCIO */}
-        {view === "inicio" && (
+      <div style={{padding:"20px 16px 120px"}}>
+        {view==="inicio"&&(
           <>
-            <div style={{ background: "#fff", borderRadius: 16, padding: "22px 20px", marginBottom: 16, boxShadow: "0 2px 12px rgba(41,128,185,0.08)", borderLeft: "4px solid #2980B9" }}>
-              <div style={{ fontSize: 10, color: "#A9B7C6", letterSpacing: ".18em", textTransform: "uppercase", marginBottom: 4, fontWeight: 600 }}>Total — {ML[mes]}</div>
-              <div style={{ fontSize: 36, fontWeight: 900, color: "#1A5276", lineHeight: 1, marginBottom: 6 }}>
-                {loading && !items.length ? "…" : fmt(total)}
+            <div style={{background:"#fff",borderRadius:16,padding:"24px 20px",marginBottom:14,boxShadow:"0 2px 12px #2980B910"}}>
+              <div style={{fontSize:11,letterSpacing:"0.15em",color:"#A9B7C6",textTransform:"uppercase",marginBottom:4,fontWeight:700}}>Total lançado — {mesAtual.label}</div>
+              <div style={{display:"flex",alignItems:"flex-end",gap:12,flexWrap:"wrap"}}>
+                <div style={{fontSize:40,fontWeight:900,color:"#1A5276",lineHeight:1}}>{fmt(total)}</div>
+                {mesAnt&&totalAnt>0&&<Comparativo atual={total} anterior={totalAnt} isParcial={!isFechado}/>}
               </div>
-              <div style={{ fontSize: 12, color: "#A9B7C6", letterSpacing: ".08em", textTransform: "uppercase" }}>
-                {ativos.length} lançamentos ativos
-              </div>
-
-              {/* Comparativo */}
-              {mesAnt && totalAnt > 0 && (() => {
-                const diff = ((total - totalAnt) / totalAnt) * 100;
-                const baixo = diff < 0;
-                const cor = baixo ? "#27AE60" : "#E74C3C";
-                return (
-                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: baixo ? "#EAFAF1" : "#FDEDEC", border: `1px solid ${cor}30`, borderRadius: 8, padding: "4px 10px", marginTop: 8 }}>
-                    <span style={{ fontSize: 13, color: cor, fontWeight: 800 }}>{baixo ? "▼" : "▲"} {Math.abs(diff).toFixed(1)}%</span>
-                    <span style={{ fontSize: 10, color: "#7F8C8D", letterSpacing: ".06em", textTransform: "uppercase", fontWeight: 700 }}>vs mês anterior</span>
-                  </div>
-                );
-              })()}
-
-              {/* Mini barras categorias */}
-              {total > 0 && (
-                <div style={{ marginTop: 14 }}>
-                  {byCat.slice(0, 3).map(({ cat, val }) => (
-                    <div key={cat} style={{ marginBottom: 10 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                        <span style={{ fontSize: 12, color: "#7F8C8D", fontWeight: 600 }}>{cat}</span>
-                        <span style={{ fontSize: 12, color: CAT_COR[cat] || "#999", fontWeight: 800 }}>{fmt(val)}</span>
+              <div style={{fontSize:12,color:"#A9B7C6",marginTop:8,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:600}}>{ativos.length} lançamentos ativos</div>
+              {mesAnt&&totalAnt>0&&<div style={{fontSize:10,color:"#D5E8F5",marginTop:4,fontFamily:"'Nunito',sans-serif"}}>Ref.: {mesAnt.label}{!isFechado?` (dias 1–${maxDia})`:""}</div>}
+            </div>
+            <div style={{fontSize:10,color:"#A9B7C6",letterSpacing:"0.2em",textTransform:"uppercase",marginBottom:10,fontWeight:700}}>Despesas por Categoria</div>
+            <div style={card}>
+              {byCat.length===0
+                ?<div style={{padding:"24px 0",textAlign:"center"}}><div style={{fontSize:32,marginBottom:8}}>📋</div><div style={{color:"#A9B7C6",fontSize:14,fontFamily:"'Nunito',sans-serif",fontWeight:700}}>Nenhum lançamento ainda.</div></div>
+                :byCat.map(({cat,val},i)=>(
+                  <div key={cat} style={{padding:"12px 0",borderBottom:i===byCat.length-1?"none":"1px solid #EBF5FB"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:6,alignItems:"center"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <div style={{width:10,height:10,borderRadius:"50%",background:CAT_CORES[cat]||"#999",flexShrink:0}}/>
+                        <span style={{fontSize:14,color:"#1A5276",fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{cat}</span>
                       </div>
-                      <div style={{ background: "#E8F4FD", borderRadius: 4, height: 5, overflow: "hidden" }}>
-                        <div style={{ width: `${total > 0 ? (val / total) * 100 : 0}%`, background: CAT_COR[cat] || "#999", height: "100%", borderRadius: 4, transition: "width .6s ease" }} />
-                      </div>
+                      <span style={{fontSize:14,fontWeight:800,color:"#1A5276",fontFamily:"'Nunito',sans-serif"}}>{fmt(val)}</span>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div style={{ fontSize: 10, color: "#A9B7C6", letterSpacing: ".2em", textTransform: "uppercase", marginBottom: 10, fontWeight: 600 }}>
-              {items.length > 0 ? "Últimos lançamentos" : "Nenhum lançamento neste mês"}
-            </div>
-
-            {loading && !items.length ? (
-              <div style={{ textAlign: "center", padding: "40px 0", color: "#A9B7C6" }}><span className="spin" /></div>
-            ) : items.length > 0 ? (
-              <div style={{ background: "#fff", borderRadius: 14, padding: "0 16px", boxShadow: "0 2px 8px rgba(41,128,185,0.07)" }}>
-                {sorted.slice(0, 10).map(t => <Row key={t.id} t={t} />)}
-              </div>
-            ) : (
-              <div style={{ background: "#fff", borderRadius: 14, padding: "32px 20px", textAlign: "center", boxShadow: "0 2px 8px rgba(41,128,185,0.07)" }}>
-                <div style={{ fontSize: 32, marginBottom: 10 }}>📋</div>
-                <div style={{ fontSize: 15, fontWeight: 800, color: "#1A5276", marginBottom: 6 }}>Sem lançamentos</div>
-                <div style={{ fontSize: 13, color: "#A9B7C6", lineHeight: 1.5 }}>Toque em "+ Novo Lançamento"<br />para registrar uma despesa.</div>
-              </div>
-            )}
-          </>
-        )}
-
-        {/* HISTÓRICO */}
-        {view === "historico" && (
-          <>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-              <div style={{ fontSize: 10, color: "#A9B7C6", letterSpacing: ".18em", textTransform: "uppercase", fontWeight: 600 }}>{items.length} lançamentos — {ML[mes]}</div>
-              <div style={{ fontSize: 14, fontWeight: 800, color: "#1A5276" }}>{fmt(total)}</div>
-            </div>
-            <div style={{ background: "#fff", borderRadius: 14, padding: "0 16px", boxShadow: "0 2px 8px rgba(41,128,185,0.07)" }}>
-              {sorted.length === 0
-                ? <div style={{ padding: "32px 0", textAlign: "center", color: "#A9B7C6", fontSize: 14 }}>Nenhum lançamento neste mês.</div>
-                : sorted.map(t => <Row key={t.id} t={t} showEdit={true} />)
+                    <Bar percent={total>0?(val/total)*100:0} color={CAT_CORES[cat]||"#999"}/>
+                    <div style={{fontSize:10,color:"#A9B7C6",marginTop:4,fontFamily:"'Nunito',sans-serif",fontWeight:600}}>
+                      {total>0?((val/total)*100).toFixed(1):0}% do total · {ativos.filter(t=>t.categoria===cat).length} lançamentos
+                    </div>
+                  </div>
+                ))
               }
             </div>
           </>
         )}
 
-        {/* CATEGORIAS */}
-        {view === "categorias" && (
+        {view==="categorias"&&(
           <>
-            <div style={{ fontSize: 10, color: "#A9B7C6", letterSpacing: ".18em", textTransform: "uppercase", marginBottom: 14, fontWeight: 600 }}>
-              Categorias — {ML[mes]}
-            </div>
-            {byCat.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "40px 0", color: "#A9B7C6", fontSize: 14 }}>Nenhum lançamento neste mês.</div>
-            ) : (
-              byCat.map(({ cat, val }) => (
-                <CatCard key={cat} cat={cat} val={val} total={total} sorted={sorted} RowComp={Row} />
+            <div style={{fontSize:22,fontWeight:900,color:"#1A5276",marginBottom:18,fontFamily:"'Nunito',sans-serif"}}>Por Categoria</div>
+            {byCat.length===0
+              ?<div style={{...card,padding:24,textAlign:"center"}}><div style={{fontSize:32,marginBottom:8}}>📂</div><div style={{color:"#A9B7C6",fontSize:14,fontFamily:"'Nunito',sans-serif",fontWeight:700}}>Nenhum lançamento neste mês.</div></div>
+              :byCat.map(({cat,val})=>(
+                <CollapsibleSection key={cat} label={cat} count={ativos.filter(t=>t.categoria===cat).length} valor={val} color={CAT_CORES[cat]||"#999"}>
+                  <div style={{...card,marginTop:0}}>
+                    {sorted.filter(t=>t.categoria===cat).map((t,i,arr)=><LancRow key={t.id} t={t} last={i===arr.length-1} showEdit={false}/>)}
+                  </div>
+                </CollapsibleSection>
               ))
-            )}
+            }
+          </>
+        )}
+
+        {view==="historico"&&(
+          <>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <div style={{fontSize:22,fontWeight:900,color:"#1A5276",fontFamily:"'Nunito',sans-serif"}}>Histórico</div>
+              <div style={{fontSize:11,color:"#A9B7C6",fontWeight:600,fontFamily:"'Nunito',sans-serif"}}>{items.length} lançamentos</div>
+            </div>
+            <div style={card}>
+              {sorted.length===0
+                ?<div style={{padding:"24px 0",textAlign:"center"}}><div style={{fontSize:32,marginBottom:8}}>🗒️</div><div style={{color:"#A9B7C6",fontSize:14,fontFamily:"'Nunito',sans-serif",fontWeight:700}}>Nenhum lançamento neste mês.</div></div>
+                :sorted.map((t,i)=><LancRow key={t.id} t={t} last={i===sorted.length-1} showEdit={true}/>)
+              }
+            </div>
           </>
         )}
       </div>
 
-      {/* FAB */}
-      {!anyModal && !showPend && view !== "caixa" && (
-        <button className="fab" onClick={() => setShowForm(true)}>
-          <span style={{ fontSize: 20, lineHeight: 1 }}>+</span> Novo Lançamento
+      {!anyModal&&!showPend&&!isFechado&&(
+        <button className="fab" onClick={()=>{setForm(emptyForm());setErro({});setShowForm(true);}}>
+          <span style={{fontSize:20,lineHeight:1}}>+</span> Novo Lançamento
         </button>
       )}
 
-      {showForm && <FormSheet mes={mes} onSaved={() => { load(); showToast("✓ Lançamento registrado"); }} onClose={() => setShowForm(false)} />}
-      {del && <DelSheet item={del} onDone={() => { load(); showToast("Lançamento excluído"); }} onClose={() => setDel(null)} />}
-      {editItem && <EditSheet item={editItem} onDone={() => { load(); showToast("✓ Lançamento atualizado"); }} onClose={() => setEditItem(null)} />}
-      {toast && <div className="toast">{toast}</div>}
+      {showForm&&(
+        <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)setShowForm(false);}}>
+          <div className="sheet">
+            <div className="handle"/>
+            <div style={{fontSize:20,fontWeight:900,color:"#1A5276",marginBottom:20,fontFamily:"'Nunito',sans-serif"}}>Novo Lançamento</div>
+            <FormBody form={form} setForm={setForm} erro={erro} setErro={setErro}/>
+            <div style={{height:16}}/>
+            <button className="btn-primary" onClick={lancar}>Registrar Lançamento</button>
+            <button className="btn-ghost" onClick={()=>setShowForm(false)}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {editItem&&(
+        <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)setEditItem(null);}}>
+          <div className="sheet">
+            <div className="handle"/>
+            <div style={{fontSize:20,fontWeight:900,color:"#1A5276",marginBottom:4,fontFamily:"'Nunito',sans-serif"}}>Editar Lançamento</div>
+            <div style={{fontSize:11,color:"#A9B7C6",marginBottom:18,fontFamily:"'Nunito',sans-serif"}}>#{editItem.id} · {fmtDate(editItem.data)}</div>
+            <FormBody form={form} setForm={setForm} erro={erro} setErro={setErro}/>
+            <div style={{height:16}}/>
+            <button className="btn-primary" onClick={salvarEdicao}>Salvar Alterações</button>
+            <button className="btn-danger" onClick={()=>{setDelItem(editItem);setEditItem(null);}}>Excluir Lançamento</button>
+            <button className="btn-ghost" onClick={()=>setEditItem(null)}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {delItem&&(
+        <div className="overlay" onClick={e=>{if(e.target===e.currentTarget){setDelItem(null);setMotivoExc("");setMotivoErr(false);}}}>
+          <div className="sheet">
+            <div className="handle"/>
+            <div style={{fontSize:18,fontWeight:900,color:"#E74C3C",marginBottom:6,fontFamily:"'Nunito',sans-serif"}}>Excluir Lançamento</div>
+            <div style={{fontSize:14,color:"#1A5276",marginBottom:2,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{delItem.descricao}</div>
+            <div style={{fontSize:13,color:"#A9B7C6",marginBottom:20,fontFamily:"'Nunito',sans-serif"}}>{fmt(delItem.valor)} · {fmtDate(delItem.data)}</div>
+            <div style={{background:"#FDEDEC",border:"1px solid #F1948A33",borderRadius:10,padding:"12px 14px",marginBottom:20,fontSize:13,color:"#E74C3C",fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+              Valor excluído da soma de valores.
+            </div>
+            <label style={FL}>Motivo da Exclusão *</label>
+            <textarea placeholder="Descreva o motivo..." value={motivoExc} onChange={e=>{setMotivoExc(e.target.value);setMotivoErr(false);}}
+              style={{background:"#F8FBFF",border:`2px solid ${motivoErr?"#E74C3C":"#D5E8F5"}`,borderRadius:10,color:"#1A5276",padding:"13px 14px",fontSize:14,fontFamily:"'Nunito',sans-serif",width:"100%",minHeight:90,resize:"none"}}/>
+            {motivoErr&&<div style={{fontSize:11,color:"#E74C3C",marginTop:4,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>Informe o motivo da exclusão</div>}
+            <div style={{height:16}}/>
+            <button className="btn-primary" style={{background:"#E74C3C"}} onClick={confirmarExclusao}>Confirmar Exclusão</button>
+            <button className="btn-ghost" onClick={()=>{setDelItem(null);setMotivoExc("");setMotivoErr(false);}}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {toast&&<div className="toast">{toast}</div>}
     </div>
   );
 }
