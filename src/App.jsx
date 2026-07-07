@@ -1,38 +1,95 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+
+// ─── SUPABASE ─────────────────────────────────────────────────────────────────
+const SUPA_URL = "https://oltwaosdzgvbbvermilk.supabase.co";
+const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9sdHdhb3Nkemd2YmJ2ZXJtaWxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1NDU3MjksImV4cCI6MjA5NDEyMTcyOX0.WbDR65w6eywTgLc4Lwii_63RrJwKPN9oj1DsgjxeFBo";
+const CID = "criar";
+const H = {
+  "Content-Type": "application/json",
+  "apikey": SUPA_KEY,
+  "Authorization": `Bearer ${SUPA_KEY}`,
+  "Prefer": "return=representation",
+};
+async function sbGet(mes) {
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/lancamentos?cliente_id=eq.${CID}&mes=eq.${mes}&order=data.desc`, { headers: H });
+    return r.ok ? r.json() : [];
+  } catch { return []; }
+}
+async function sbPost(body) {
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/lancamentos`, { method: "POST", headers: H, body: JSON.stringify(body) });
+    return r.ok ? r.json() : null;
+  } catch { return null; }
+}
+async function sbPatch(id, body) {
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/lancamentos?id=eq.${id}`, { method: "PATCH", headers: { ...H, "Prefer": "return=minimal" }, body: JSON.stringify(body) });
+    return r.ok;
+  } catch { return false; }
+}
+async function rcGet(mes) {
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/receitas?cliente_id=eq.${CID}&mes=eq.${mes}&order=data.desc`, { headers: H });
+    return r.ok ? r.json() : [];
+  } catch { return []; }
+}
+async function rcPost(body) {
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/receitas`, { method: "POST", headers: H, body: JSON.stringify(body) });
+    return r.ok ? r.json() : null;
+  } catch { return null; }
+}
+async function rcDelete(id) {
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/receitas?id=eq.${id}`, { method: "DELETE", headers: H });
+    return r.ok;
+  } catch { return false; }
+}
+const uid = () => (crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now());
+
 
 const CATEGORIAS = [
   "Administrativo",
   "Alimentação",
+  "Compromissos Financeiros",
   "Impostos",
   "Infraestrutura",
   "Material Didático",
   "Mensalidades",
   "Obra",
+  "Outros",
   "Papelaria",
   "Salários",
   "Serviços",
   "Transporte",
 ];
-
 const MEIOS          = ["Crédito","Débito","Dinheiro","Pix","Transferência"];
 const PERIODICIDADES = ["Mensal","Quinzenal","Semanal"];
 const REPETICOES_OPT = [2,3,4,5,6,12];
 const MESES_NOMES    = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
-
 const CAT_CORES = {
-  "Administrativo":   "#E67E22",
-  "Alimentação":      "#F39C12",
-  "Impostos":         "#7D3C98",
-  "Infraestrutura":   "#2980B9",
-  "Material Didático":"#8E44AD",
-  "Mensalidades":     "#27AE60",
-  "Obra":             "#C0392B",
-  "Papelaria":        "#1ABC9C",
-  "Salários":         "#E91E8C",
-  "Serviços":         "#16A085",
-  "Transporte":       "#7F8C8D",
+  "Administrativo":          "#E67E22",
+  "Alimentação":             "#F39C12",
+  "Compromissos Financeiros":"#C0392B",
+  "Impostos":                "#7D3C98",
+  "Infraestrutura":          "#2980B9",
+  "Material Didático":       "#8E44AD",
+  "Mensalidades":            "#27AE60",
+  "Obra":                    "#B03A2E",
+  "Outros":                  "#95A5A6",
+  "Papelaria":               "#1ABC9C",
+  "Salários":                "#E91E8C",
+  "Serviços":                "#16A085",
+  "Transporte":              "#7F8C8D",
 };
-
+const MEIO_CORES = {
+  "Crédito":       "#8E44AD",
+  "Débito":        "#3498DB",
+  "Dinheiro":      "#27AE60",
+  "Pix":           "#00B894",
+  "Transferência": "#E67E22",
+};
 const MESES = [
   { label:"Abril 2026",    mes:"2026-04", fechado:true  },
   { label:"Maio 2026",     mes:"2026-05", fechado:true  },
@@ -41,127 +98,6 @@ const MESES = [
   { label:"Agosto 2026",   mes:"2026-08", fechado:false },
   { label:"Setembro 2026", mes:"2026-09", fechado:false },
 ];
-
-// ─── ABRIL 2026 ───────────────────────────────────────────────────────────────
-const ABRIL_DATA = [
-  { id:101, data:"2026-04-30", descricao:"Salário — Adriana Gomes Rodrigues",              categoria:"Salários",       meio:"Transferência", valor:1566.97, obs:"Holerite Abr/2026 · Monitora",         recorrente:true  },
-  { id:102, data:"2026-04-30", descricao:"Salário — Amanda de Souza Sabino",               categoria:"Salários",       meio:"Transferência", valor:1402.17, obs:"Holerite Abr/2026 · Ajudante Geral",    recorrente:true  },
-  { id:103, data:"2026-04-30", descricao:"Salário — Angela Santos Borges de Carvalho",     categoria:"Salários",       meio:"Transferência", valor:1578.11, obs:"Holerite Abr/2026 · Educador Infantil", recorrente:true  },
-  { id:104, data:"2026-04-30", descricao:"Salário — Clarice Martins Nunes",                categoria:"Salários",       meio:"Transferência", valor:1412.58, obs:"Holerite Abr/2026 · Educador Infantil", recorrente:true  },
-  { id:105, data:"2026-04-30", descricao:"Salário — Jaqueline Rodrigues de Lima Vieira",   categoria:"Salários",       meio:"Transferência", valor:1402.17, obs:"Holerite Abr/2026 · Monitora",         recorrente:true  },
-  { id:106, data:"2026-04-30", descricao:"Salário — Leila Cristina dos Santos Nascimento", categoria:"Salários",       meio:"Transferência", valor:1402.17, obs:"Holerite Abr/2026 · Monitora",         recorrente:true  },
-  { id:107, data:"2026-04-30", descricao:"Salário — Lidiane Urbano Martins Ribeiro",       categoria:"Salários",       meio:"Transferência", valor:1566.97, obs:"Holerite Abr/2026 · Monitora",         recorrente:true  },
-  { id:108, data:"2026-04-30", descricao:"Salário — Michelle Azevedo",                     categoria:"Salários",       meio:"Transferência", valor:2299.32, obs:"Holerite Abr/2026 · Coord. Pedagógica", recorrente:true  },
-  { id:109, data:"2026-04-30", descricao:"Salário — Tabata Rosa de Oliveira dos Santos",   categoria:"Salários",       meio:"Transferência", valor:1537.25, obs:"Holerite Abr/2026 · Ajudante Geral",    recorrente:true  },
-  { id:110, data:"2026-04-30", descricao:"Pró-labore — Veruska Natalina Preite",           categoria:"Salários",       meio:"Transferência", valor:1780.00, obs:"Holerite Abr/2026 · Administrador",     recorrente:true  },
-  { id:111, data:"2026-04-28", descricao:"Rosemeire Martins de Lima",                      categoria:"Serviços",       meio:"Pix",           valor:300.00,  obs:"Extrato — prestador externo",           recorrente:false },
-  { id:112, data:"2026-04-29", descricao:"Tiago Ferreira Borba",                           categoria:"Serviços",       meio:"Pix",           valor:144.00,  obs:"Extrato — prestador externo",           recorrente:false },
-  { id:113, data:"2026-04-30", descricao:"Thais Lopes de (53 889 162)",                    categoria:"Serviços",       meio:"Pix",           valor:954.00,  obs:"Extrato — prestador externo",           recorrente:false },
-].map(t=>({...t, classe:"Empresa", excluido:false, motivoExclusao:""}));
-
-// ─── MAIO 2026 ────────────────────────────────────────────────────────────────
-const MAIO_DATA = [
-  { id:201, data:"2026-05-08", descricao:"Salário — Adriana Gomes Rodrigues",              categoria:"Salários",       meio:"Transferência", valor:1566.97, obs:"Holerite Mai/2026 · Monitora",         recorrente:true  },
-  { id:202, data:"2026-05-08", descricao:"Salário — Amanda de Souza Sabino",               categoria:"Salários",       meio:"Transferência", valor:1402.17, obs:"Holerite Mai/2026 · Ajudante Geral",    recorrente:true  },
-  { id:203, data:"2026-05-08", descricao:"Salário — Angela Santos Borges de Carvalho",     categoria:"Salários",       meio:"Transferência", valor:1578.11, obs:"Holerite Mai/2026 · Educador Infantil", recorrente:true  },
-  { id:204, data:"2026-05-08", descricao:"Salário — Clarice Martins Nunes",                categoria:"Salários",       meio:"Transferência", valor:1412.58, obs:"Holerite Mai/2026 · Educador Infantil", recorrente:true  },
-  { id:205, data:"2026-05-08", descricao:"Salário — Jaqueline Rodrigues de Lima Vieira",   categoria:"Salários",       meio:"Transferência", valor:1402.17, obs:"Holerite Mai/2026 · Monitora",         recorrente:true  },
-  { id:206, data:"2026-05-08", descricao:"Salário — Leila Cristina dos Santos Nascimento", categoria:"Salários",       meio:"Transferência", valor:1402.17, obs:"Holerite Mai/2026 · Monitora",         recorrente:true  },
-  { id:207, data:"2026-05-08", descricao:"Salário — Lidiane Urbano Martins Ribeiro",       categoria:"Salários",       meio:"Transferência", valor:1566.97, obs:"Holerite Mai/2026 · Monitora",         recorrente:true  },
-  { id:208, data:"2026-05-08", descricao:"Salário — Michelle Azevedo",                     categoria:"Salários",       meio:"Transferência", valor:2299.32, obs:"Holerite Mai/2026 · Coord. Pedagógica", recorrente:true  },
-  { id:209, data:"2026-05-08", descricao:"Salário — Tabata Rosa de Oliveira dos Santos",   categoria:"Salários",       meio:"Transferência", valor:1537.25, obs:"Holerite Mai/2026 · Ajudante Geral",    recorrente:true  },
-  { id:210, data:"2026-05-08", descricao:"Pró-labore — Veruska Natalina Preite",           categoria:"Salários",       meio:"Transferência", valor:1780.00, obs:"Holerite Mai/2026 · Administrador",     recorrente:true  },
-  { id:211, data:"2026-05-11", descricao:"Gabriella Melo Custódio",                        categoria:"Serviços",       meio:"Pix",           valor:900.00,  obs:"Extrato — prestador externo",           recorrente:false },
-  { id:212, data:"2026-05-11", descricao:"Diogenes Ricardo da Silva",                      categoria:"Serviços",       meio:"Pix",           valor:750.00,  obs:"Extrato — prestador externo",           recorrente:false },
-  { id:213, data:"2026-05-11", descricao:"Maria Eugenia T. Gonzalez",                      categoria:"Serviços",       meio:"Pix",           valor:1200.00, obs:"Extrato — prestador externo",           recorrente:false },
-  { id:214, data:"2026-05-11", descricao:"Vanessa Preite",                                 categoria:"Serviços",       meio:"Pix",           valor:1987.00, obs:"Extrato — prestador externo",           recorrente:false },
-  { id:215, data:"2026-05-11", descricao:"Vanessa Preite (2ª parcela)",                    categoria:"Serviços",       meio:"Pix",           valor:265.00,  obs:"Extrato — prestador externo",           recorrente:false },
-  { id:216, data:"2026-05-04", descricao:"Rafael Braz dos Santos Ol",                      categoria:"Serviços",       meio:"Pix",           valor:100.00,  obs:"Extrato — prestador externo",           recorrente:false },
-  { id:217, data:"2026-05-04", descricao:"Gilberto Santana dos Reis",                      categoria:"Serviços",       meio:"Pix",           valor:100.00,  obs:"Extrato — prestador externo",           recorrente:false },
-  { id:218, data:"2026-05-04", descricao:"Rafael Braz dos Santos Ol (2)",                  categoria:"Serviços",       meio:"Pix",           valor:150.00,  obs:"Extrato — prestador externo",           recorrente:false },
-  { id:219, data:"2026-05-07", descricao:"Inacio Preite Junior",                           categoria:"Administrativo", meio:"Pix",           valor:50.00,   obs:"Extrato Santander",                     recorrente:false },
-  { id:220, data:"2026-05-11", descricao:"SABESP — Água e Esgoto",                         categoria:"Infraestrutura", meio:"Débito",         valor:236.40,  obs:"Extrato Santander",                     recorrente:true  },
-  { id:221, data:"2026-05-11", descricao:"N-Multimídia Telecomunica (1)",                  categoria:"Infraestrutura", meio:"Pix",            valor:102.91,  obs:"Boleto — extrato",                      recorrente:true  },
-  { id:222, data:"2026-05-11", descricao:"N-Multimídia Telecomunica (2)",                  categoria:"Infraestrutura", meio:"Pix",            valor:99.90,   obs:"Boleto — extrato",                      recorrente:true  },
-  { id:223, data:"2026-05-11", descricao:"TIM S.A.",                                       categoria:"Infraestrutura", meio:"Pix",            valor:62.30,   obs:"Extrato Santander",                     recorrente:true  },
-  { id:224, data:"2026-05-06", descricao:"JBS Dedetizadora",                               categoria:"Serviços",       meio:"Pix",            valor:650.22,  obs:"Boleto — extrato",                      recorrente:false },
-  { id:225, data:"2026-05-06", descricao:"Empório Mega 1 C Alimento",                      categoria:"Alimentação",    meio:"Pix",            valor:845.60,  obs:"Boleto — extrato",                      recorrente:false },
-  { id:226, data:"2026-05-11", descricao:"Uber do Brasil Tecnologia",                      categoria:"Transporte",     meio:"Pix",            valor:19.93,   obs:"Extrato Santander",                     recorrente:false },
-  { id:227, data:"2026-05-12", descricao:"Uber do Brasil Tecnologia",                      categoria:"Transporte",     meio:"Pix",            valor:19.56,   obs:"Extrato Santander",                     recorrente:false },
-  { id:228, data:"2026-05-12", descricao:"Uber do Brasil Tecnologia",                      categoria:"Transporte",     meio:"Pix",            valor:13.99,   obs:"Extrato Santander",                     recorrente:false },
-].map(t=>({...t, classe:"Empresa", excluido:false, motivoExclusao:""}));
-
-// ─── JUNHO 2026 ───────────────────────────────────────────────────────────────
-// Fonte: extrato bancário Santander 01/06–24/06/2026 (saídas)
-//        + fatura cartão (Crédito) informada manualmente
-const JUNHO_DATA = [
-  // 01/06 — Extrato bancário
-  { id:301, data:"2026-06-01", descricao:"Uber do Brasil Tecnologia",           categoria:"Transporte",     meio:"Pix",           valor:17.98,   obs:"Extrato Jun/2026",                     recorrente:false },
-  { id:302, data:"2026-06-01", descricao:"Rafael Braz dos Santos",              categoria:"Serviços",       meio:"Pix",           valor:160.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
-  // 01/06 — Fatura cartão
-  { id:303, data:"2026-06-01", descricao:"Manutenção e melhorias",              categoria:"Obra",           meio:"Crédito",       valor:172.00,  obs:"Fatura cartão Jun/2026",               recorrente:true  },
-  { id:304, data:"2026-06-01", descricao:"Manutenção e melhorias",              categoria:"Obra",           meio:"Crédito",       valor:107.00,  obs:"Fatura cartão Jun/2026",               recorrente:true  },
-  { id:305, data:"2026-06-01", descricao:"Padaria mensal",                      categoria:"Alimentação",    meio:"Crédito",       valor:300.29,  obs:"Fatura cartão Jun/2026",               recorrente:false },
-  { id:306, data:"2026-06-01", descricao:"Produtos de limpeza",                 categoria:"Infraestrutura", meio:"Crédito",       valor:392.00,  obs:"Fatura cartão Jun/2026",               recorrente:false },
-  { id:307, data:"2026-06-01", descricao:"Compra mensal junho",                 categoria:"Alimentação",    meio:"Crédito",       valor:1517.20, obs:"Fatura cartão Jun/2026",               recorrente:false },
-  // 03/06 — Extrato bancário
-  { id:308, data:"2026-06-03", descricao:"APM da EMEFEI Silvio Pedro",          categoria:"Administrativo", meio:"Pix",           valor:150.00,  obs:"Extrato Jun/2026",                     recorrente:false },
-  { id:309, data:"2026-06-03", descricao:"Nova Gás Distribuidora",              categoria:"Infraestrutura", meio:"Pix",           valor:120.00,  obs:"Extrato Jun/2026",                     recorrente:true  },
-  // 05/06 — Extrato bancário
-  { id:310, data:"2026-06-05", descricao:"Henrique dos Santos Pereira",         categoria:"Serviços",       meio:"Pix",           valor:270.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
-  { id:311, data:"2026-06-05", descricao:"Pró-labore — Veruska Natalina Preite",categoria:"Salários",       meio:"Pix",           valor:3000.00, obs:"Extrato Jun/2026 · Administrador",     recorrente:true  },
-  { id:312, data:"2026-06-05", descricao:"Vanessa Preite",                      categoria:"Serviços",       meio:"Pix",           valor:1978.00, obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
-  // 08/06 — Extrato bancário
-  { id:313, data:"2026-06-08", descricao:"TIM S.A.",                            categoria:"Infraestrutura", meio:"Pix",           valor:60.99,   obs:"Extrato Jun/2026",                     recorrente:true  },
-  { id:314, data:"2026-06-08", descricao:"Empório Mega 1 C Alimento",           categoria:"Alimentação",    meio:"Pix",           valor:840.00,  obs:"Extrato Jun/2026",                     recorrente:false },
-  { id:315, data:"2026-06-08", descricao:"Pix Enviado CRIAR (operacional)",     categoria:"Administrativo", meio:"Transferência", valor:1505.00, obs:"Extrato Jun/2026 — transf. interna",   recorrente:false },
-  { id:316, data:"2026-06-08", descricao:"Vanessa Preite",                      categoria:"Serviços",       meio:"Pix",           valor:265.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
-  { id:317, data:"2026-06-08", descricao:"Folha de Pagamento — Jun/2026",       categoria:"Salários",       meio:"Transferência", valor:17839.00,obs:"Extrato Jun/2026 — Pix Enviado CRIAR", recorrente:false },
-  { id:318, data:"2026-06-08", descricao:"Uber do Brasil Tecnologia",           categoria:"Transporte",     meio:"Pix",           valor:15.97,   obs:"Extrato Jun/2026",                     recorrente:false },
-  { id:319, data:"2026-06-08", descricao:"Uber do Brasil Tecnologia",           categoria:"Transporte",     meio:"Pix",           valor:17.99,   obs:"Extrato Jun/2026",                     recorrente:false },
-  { id:320, data:"2026-06-08", descricao:"Rafael Braz dos Santos",              categoria:"Serviços",       meio:"Pix",           valor:100.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
-  { id:321, data:"2026-06-08", descricao:"Rafael Braz dos Santos (2)",          categoria:"Serviços",       meio:"Pix",           valor:10.00,   obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
-  // 09/06 — Extrato bancário
-  { id:322, data:"2026-06-09", descricao:"N Multifibra",                        categoria:"Infraestrutura", meio:"Pix",           valor:99.99,   obs:"Extrato Jun/2026",                     recorrente:true  },
-  { id:323, data:"2026-06-09", descricao:"Maria Eugenia T. Gonzalez",           categoria:"Serviços",       meio:"Pix",           valor:1500.00, obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
-  // 10/06 — Extrato bancário
-  { id:324, data:"2026-06-10", descricao:"Diogenes Ricardo da Silva",           categoria:"Serviços",       meio:"Pix",           valor:750.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
-  { id:325, data:"2026-06-10", descricao:"Liliane Souza Preite",                categoria:"Serviços",       meio:"Pix",           valor:35.00,   obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
-  { id:326, data:"2026-06-10", descricao:"Rafael Braz dos Santos",              categoria:"Serviços",       meio:"Pix",           valor:100.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
-  // 11/06 — Extrato bancário
-  { id:327, data:"2026-06-11", descricao:"Mercado Superlar Ltda",               categoria:"Alimentação",    meio:"Pix",           valor:41.94,   obs:"Extrato Jun/2026",                     recorrente:false },
-  { id:328, data:"2026-06-11", descricao:"Tese Comércio de Livros",             categoria:"Material Didático",meio:"Pix",         valor:210.00,  obs:"Extrato Jun/2026",                     recorrente:false },
-  { id:329, data:"2026-06-11", descricao:"Veruska Natalina Preite (reimb.)",    categoria:"Salários",       meio:"Pix",           valor:72.00,   obs:"Extrato Jun/2026 — reembolso",         recorrente:false },
-  { id:330, data:"2026-06-11", descricao:"Gabriella Melo Custódio",             categoria:"Serviços",       meio:"Pix",           valor:1020.00, obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
-  // 12/06 — Extrato bancário
-  { id:331, data:"2026-06-12", descricao:"Rafaela dos Reis Cabral D",           categoria:"Serviços",       meio:"Pix",           valor:170.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
-  // 15/06 — Extrato bancário
-  { id:332, data:"2026-06-15", descricao:"João Carlos Luiz Lima Pri",           categoria:"Serviços",       meio:"Pix",           valor:300.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
-  { id:333, data:"2026-06-15", descricao:"Sempre Nutri Mais",                   categoria:"Alimentação",    meio:"Pix",           valor:245.00,  obs:"Extrato Jun/2026",                     recorrente:false },
-  { id:334, data:"2026-06-15", descricao:"CEF Matriz — FGTS",                  categoria:"Impostos"        , meio:"Pix",           valor:217.56,  obs:"Extrato Jun/2026",                     recorrente:true  },
-  { id:335, data:"2026-06-15", descricao:"AES Eletropaulo — Conta de Luz",     categoria:"Infraestrutura", meio:"Débito",         valor:402.63,  obs:"Extrato Jun/2026",                     recorrente:true  },
-  { id:336, data:"2026-06-15", descricao:"Centauro Seguradora",                 categoria:"Administrativo", meio:"Pix",           valor:276.66,  obs:"Extrato Jun/2026",                     recorrente:true  },
-  { id:337, data:"2026-06-15", descricao:"Hadou Soluções Financeira",           categoria:"Administrativo", meio:"Pix",           valor:189.90,  obs:"Extrato Jun/2026",                     recorrente:false },
-  { id:338, data:"2026-06-15", descricao:"Ranny Caroline Mouzinho S",           categoria:"Serviços",       meio:"Pix",           valor:35.00,   obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
-  { id:339, data:"2026-06-15", descricao:"Rosiani Moraes dos Santos",           categoria:"Serviços",       meio:"Pix",           valor:70.00,   obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
-  // 16/06 — Extrato bancário
-  { id:340, data:"2026-06-16", descricao:"Katia do Nascimento",                 categoria:"Serviços",       meio:"Pix",           valor:220.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
-  // 19/06 — Extrato bancário
-  { id:341, data:"2026-06-19", descricao:"IFRACTAL Desenvolvimento",            categoria:"Administrativo", meio:"Pix",           valor:99.60,   obs:"Extrato Jun/2026",                     recorrente:false },
-  { id:342, data:"2026-06-19", descricao:"Receita Federal",                     categoria:"Impostos"        , meio:"Pix",           valor:189.48,  obs:"Extrato Jun/2026",                     recorrente:false },
-  { id:343, data:"2026-06-19", descricao:"CEF Matriz — FGTS",                  categoria:"Impostos"        , meio:"Pix",           valor:1239.38, obs:"Extrato Jun/2026",                     recorrente:true  },
-  { id:344, data:"2026-06-19", descricao:"DARF Tributos Federais",              categoria:"Impostos"        , meio:"Débito",         valor:1057.74, obs:"Extrato Jun/2026",                     recorrente:true  },
-  { id:345, data:"2026-06-19", descricao:"Cleberson Americo de Mora",           categoria:"Serviços",       meio:"Pix",           valor:300.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
-  // 22/06 — Extrato bancário
-  { id:346, data:"2026-06-22", descricao:"Bianca Soares Rodrigues",             categoria:"Serviços",       meio:"Pix",           valor:350.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
-  { id:347, data:"2026-06-22", descricao:"Marcos Braz da Silva",                categoria:"Serviços",       meio:"Pix",           valor:200.00,  obs:"Extrato Jun/2026 — prestador externo", recorrente:false },
-  { id:348, data:"2026-06-22", descricao:"Pix Enviado CRIAR (operacional)",     categoria:"Administrativo", meio:"Transferência", valor:8700.00, obs:"Extrato Jun/2026 — transf. interna",   recorrente:false },
-  // 23/06 — Extrato bancário
-  { id:349, data:"2026-06-23", descricao:"META QSM Gerenciamento",              categoria:"Administrativo", meio:"Pix",           valor:750.00,  obs:"Extrato Jun/2026",                     recorrente:false },
-  { id:350, data:"2026-06-23", descricao:"DARF Tributos Federais",              categoria:"Impostos"        , meio:"Débito",         valor:596.58,  obs:"Extrato Jun/2026",                     recorrente:false },
-  { id:351, data:"2026-06-23", descricao:"Receita Federal",                     categoria:"Impostos"        , meio:"Pix",           valor:132.90,  obs:"Extrato Jun/2026",                     recorrente:false },
-].map(t=>({...t, classe:"Empresa", excluido:false, motivoExclusao:""}));
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt     = v => v.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const fmtDate = d => { const[,m,day]=d.split("-"); return `${day}/${m}`; };
@@ -171,7 +107,18 @@ const d2float = d => parseInt(d||"0",10)/100;
 const float2d = v => String(Math.round(v*100));
 const soma    = arr => arr.filter(t=>!t.excluido).reduce((s,t)=>s+t.valor,0);
 const padN    = n => String(n).padStart(2,"0");
-
+// Retorna 5 faixas semanais do mês: [{ini, fim, label}]
+const semanasDoMes = mesKey => {
+  const [ano,mes] = mesKey.split("-").map(Number);
+  const ultDia = new Date(ano, mes, 0).getDate();
+  return [
+    { ini:1,  fim:Math.min(7,ultDia),  label:"Sem 1" },
+    { ini:8,  fim:Math.min(14,ultDia), label:"Sem 2" },
+    { ini:15, fim:Math.min(21,ultDia), label:"Sem 3" },
+    { ini:22, fim:Math.min(28,ultDia), label:"Sem 4" },
+    ...(ultDia>28 ? [{ ini:29, fim:ultDia, label:"Sem 5" }] : []),
+  ];
+};
 const CSS = `@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
 *{box-sizing:border-box;margin:0;padding:0} html,body{background:#F0F6FF}
 input,select,textarea{-webkit-appearance:none;appearance:none}
@@ -179,11 +126,14 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:#2980B9!import
 .tab:hover{color:#1A5276!important}
 .btn-primary{background:#2980B9;color:#fff;border:none;border-radius:12px;padding:16px;font-size:15px;font-family:'Nunito',sans-serif;font-weight:800;cursor:pointer;width:100%;transition:all .2s}
 .btn-primary:hover{background:#1F618D}
+.btn-success{background:#27AE60;color:#fff;border:none;border-radius:12px;padding:16px;font-size:15px;font-family:'Nunito',sans-serif;font-weight:800;cursor:pointer;width:100%;transition:all .2s}
+.btn-success:hover{background:#1E8449}
 .btn-ghost{background:none;border:2px solid #D5E8F5;border-radius:12px;padding:14px;font-size:14px;font-family:'Nunito',sans-serif;font-weight:700;cursor:pointer;width:100%;color:#5D6D7E;transition:all .2s;margin-top:10px}
 .btn-ghost:hover{border-color:#aaa;color:#333}
 .btn-danger{background:none;border:2px solid #E74C3C;border-radius:12px;padding:14px;font-size:14px;font-family:'Nunito',sans-serif;font-weight:700;cursor:pointer;width:100%;color:#E74C3C;transition:all .2s;margin-top:10px}
 .btn-danger:hover{background:#E74C3C;color:#fff}
 .fab{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#2980B9,#8E44AD);color:#fff;border:none;border-radius:50px;padding:15px 28px;font-size:14px;font-family:'Nunito',sans-serif;font-weight:800;cursor:pointer;box-shadow:0 6px 24px #2980B940;z-index:90;display:flex;align-items:center;gap:8px;transition:all .2s;white-space:nowrap}
+.fab-green{background:linear-gradient(135deg,#27AE60,#16A085);box-shadow:0 6px 24px #27AE6040}
 .fab:hover{transform:translateX(-50%) translateY(-2px)} .fab:active{transform:translateX(-50%) scale(.98)}
 .overlay{position:fixed;inset:0;background:#00000055;z-index:200;display:flex;align-items:flex-end}
 .sheet{background:#fff;border-radius:24px 24px 0 0;padding:8px 20px 40px;width:100%;max-width:480px;margin:0 auto;animation:sheetUp .28s cubic-bezier(.32,.72,0,1);max-height:94vh;overflow-y:auto}
@@ -197,6 +147,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:#2980B9!import
 .badge{display:inline-flex;align-items:center;border-radius:20px;padding:2px 9px;font-size:10px;font-weight:700;font-family:'Nunito',sans-serif;margin-top:3px}
 .icon-btn{background:none;border:2px solid #D5E8F5;border-radius:8px;width:30px;height:30px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0;color:#7F8C8D}
 .icon-btn:hover{border-color:#2980B9;color:#2980B9}
+.icon-btn-danger:hover{border-color:#E74C3C;color:#E74C3C}
 .notif-btn{position:relative;background:none;border:2px solid #D5E8F5;border-radius:10px;width:40px;height:40px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#7F8C8D;transition:all .2s;flex-shrink:0}
 .notif-btn:hover,.notif-btn.has-pending{border-color:#E67E22;color:#E67E22;background:#FEF5EC}
 .notif-dot{position:absolute;top:-4px;right:-4px;width:16px;height:16px;background:#E67E22;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:700;font-family:'Nunito',sans-serif;border:2px solid #F0F6FF}
@@ -214,12 +165,11 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:#2980B9!import
 .period-btn:hover,.period-btn.on{border-color:#2980B9;background:#2980B9;color:#fff}
 .rep-btn{border:2px solid #D5E8F5;border-radius:10px;background:#F8FBFF;color:#5D6D7E;font-size:13px;font-family:'Nunito',sans-serif;font-weight:700;cursor:pointer;transition:all .2s;padding:8px 10px}
 .rep-btn:hover,.rep-btn.on{border-color:#2980B9;background:#2980B9;color:#fff}
-.pend-item{padding:14px 20px;border-bottom:1px solid #EBF5FB;display:flex;justify-content:space-between;align-items:center;gap:10}
+.pend-item{padding:14px 20px;border-bottom:1px solid #EBF5FB;display:flex;justify-content:space-between;align-items:center;gap:10px}
 .pend-item:last-child{border-bottom:none}
 .toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:#1A5276;color:#fff;padding:12px 24px;border-radius:50px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:700;z-index:500;white-space:nowrap;animation:toastIn .25s ease;pointer-events:none}
 @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 ::-webkit-scrollbar{width:3px} ::-webkit-scrollbar-thumb{background:#2980B9;border-radius:2px}`;
-
 function Logo({size=48}) {
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
@@ -237,7 +187,6 @@ function Logo({size=48}) {
     </svg>
   );
 }
-
 function Bar({percent,color="#2980B9"}) {
   return (
     <div style={{background:"#E8F4FD",borderRadius:4,height:6,width:"100%",overflow:"hidden"}}>
@@ -245,7 +194,6 @@ function Bar({percent,color="#2980B9"}) {
     </div>
   );
 }
-
 function Toggle({value,onChange}) {
   return (
     <div style={{width:44,height:24,borderRadius:12,cursor:"pointer",transition:"background .2s",background:value?"#2980B9":"#ddd",display:"flex",alignItems:"center",padding:2,flexShrink:0}} onClick={()=>onChange(!value)}>
@@ -253,7 +201,6 @@ function Toggle({value,onChange}) {
     </div>
   );
 }
-
 function Comparativo({atual,anterior,isParcial}) {
   if(!anterior) return null;
   const diff=((atual-anterior)/anterior)*100;
@@ -266,7 +213,6 @@ function Comparativo({atual,anterior,isParcial}) {
     </div>
   );
 }
-
 function CollapsibleSection({label,count,valor,color,children}) {
   const [open,setOpen]=useState(false);
   return (
@@ -291,7 +237,6 @@ function CollapsibleSection({label,count,valor,color,children}) {
     </div>
   );
 }
-
 function MonthPicker({mesAtual,onSelect,onClose}) {
   const ano=parseInt(mesAtual.slice(0,4));
   const disp=MESES.map(m=>m.mes);
@@ -312,11 +257,10 @@ function MonthPicker({mesAtual,onSelect,onClose}) {
     </>
   );
 }
-
 const emptyForm=()=>({descricao:"",valorDigits:"",categoria:"",meio:"",data:hoje(),obs:"",recorrente:false,periodicidade:"Mensal",diaVencimento:"",repeticoes:null});
+const emptyFormReceita=()=>({descricao:"",valorDigits:"",data:hoje(),obs:""});
 const INP=err=>({background:"#F8FBFF",border:`2px solid ${err?"#E74C3C":"#D5E8F5"}`,borderRadius:10,color:"#1A5276",padding:"13px 14px",fontSize:15,fontFamily:"'Nunito',sans-serif",width:"100%",transition:"border .2s"});
 const FL={fontSize:11,color:"#7F8C8D",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:7,display:"block",fontWeight:700,fontFamily:"'Nunito',sans-serif"};
-
 function FormBody({form,setForm,erro,setErro}) {
   const Err=({k})=>erro[k]?<div style={{fontSize:11,color:"#E74C3C",marginTop:4,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{erro[k]}</div>:null;
   return (
@@ -400,57 +344,154 @@ function FormBody({form,setForm,erro,setErro}) {
     </>
   );
 }
-
+// Formulário simplificado só de receita (valor + data + obs)
+function FormBodyReceita({form,setForm,erro,setErro}) {
+  const Err=({k})=>erro[k]?<div style={{fontSize:11,color:"#E74C3C",marginTop:4,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{erro[k]}</div>:null;
+  return (
+    <>
+      <div style={{marginBottom:16}}>
+        <label style={FL}>Descrição *</label>
+        <input style={INP(erro.descricao)} placeholder="Ex: Mensalidade Junho — Turma A" value={form.descricao}
+          onChange={e=>{setForm(f=>({...f,descricao:e.target.value}));setErro(r=>({...r,descricao:null}));}}/>
+        <Err k="descricao"/>
+      </div>
+      <div style={{marginBottom:16}}>
+        <label style={FL}>Valor Recebido *</label>
+        <div style={{position:"relative"}}>
+          <span style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",fontSize:14,color:"#7F8C8D",fontFamily:"'Nunito',sans-serif",fontWeight:700}}>R$</span>
+          <input style={{...INP(erro.valor),paddingLeft:40,fontSize:22,fontWeight:800,color:"#27AE60"}} placeholder="0,00"
+            value={form.valorDigits?d2brl(form.valorDigits):""} inputMode="numeric"
+            onChange={e=>{setForm(f=>({...f,valorDigits:e.target.value.replace(/\D/g,"")}));setErro(r=>({...r,valor:null}));}}/>
+        </div>
+        <Err k="valor"/>
+      </div>
+      <div style={{marginBottom:16}}>
+        <label style={FL}>Data *</label>
+        <input type="date" style={INP(erro.data)} value={form.data}
+          onChange={e=>{setForm(f=>({...f,data:e.target.value}));setErro(r=>({...r,data:null}));}}/>
+        <Err k="data"/>
+      </div>
+      <div style={{marginBottom:8}}>
+        <label style={FL}>Observação</label>
+        <textarea style={{...INP(false),minHeight:64,resize:"none",fontSize:14}} placeholder="Opcional — origem, forma de pagamento, etc."
+          value={form.obs} onChange={e=>setForm(f=>({...f,obs:e.target.value}))}/>
+      </div>
+    </>
+  );
+}
 const INIT_STATE={
-  "2026-04":ABRIL_DATA,
-  "2026-05":MAIO_DATA,
-  "2026-06":JUNHO_DATA,
+  "2026-04":[],
+  "2026-05":[],
+  "2026-06":[],
   "2026-07":[],
   "2026-08":[],
   "2026-09":[],
 };
-
+const INIT_RECEITAS={
+  "2026-04":[],
+  "2026-05":[],
+  "2026-06":[],
+  "2026-07":[],
+  "2026-08":[],
+  "2026-09":[],
+};
 export default function App() {
-  const [mesIdx,setMesIdx]         = useState(2);
-  const [allItems,setAllItems]     = useState(INIT_STATE);
-  const [view,setView]             = useState("inicio");
-  const [showPicker,setShowPicker] = useState(false);
-  const [showPend,setShowPend]     = useState(false);
-  const [showForm,setShowForm]     = useState(false);
-  const [editItem,setEditItem]     = useState(null);
-  const [delItem,setDelItem]       = useState(null);
-  const [motivoExc,setMotivoExc]   = useState("");
-  const [motivoErr,setMotivoErr]   = useState(false);
-  const [form,setForm]             = useState(emptyForm());
-  const [erro,setErro]             = useState({});
-  const [toast,setToast]           = useState(null);
-
+  const [mesIdx,setMesIdx]                 = useState(2);
+  const [allItems,setAllItems]             = useState(INIT_STATE);
+  const [allReceitas,setAllReceitas]       = useState(INIT_RECEITAS);
+  const [loading,setLoading]               = useState(true);
+  const [lastSync,setLastSync]             = useState(null);
+  const [view,setView]                     = useState("inicio");
+  const [showPicker,setShowPicker]         = useState(false);
+  const [showPend,setShowPend]             = useState(false);
+  const [showForm,setShowForm]             = useState(false);
+  const [showFormReceita,setShowFormReceita]=useState(false);
+  const [editItem,setEditItem]             = useState(null);
+  const [delItem,setDelItem]               = useState(null);
+  const [delReceita,setDelReceita]         = useState(null);
+  const [motivoExc,setMotivoExc]           = useState("");
+  const [motivoErr,setMotivoErr]           = useState(false);
+  const [form,setForm]                     = useState(emptyForm());
+  const [formReceita,setFormReceita]       = useState(emptyFormReceita());
+  const [erro,setErro]                     = useState({});
+  const [erroReceita,setErroReceita]       = useState({});
+  const [toast,setToast]                   = useState(null);
   const mesAtual  = MESES[mesIdx];
   const mesAnt    = mesIdx>0?MESES[mesIdx-1]:null;
   const isFechado = mesAtual.fechado;
   const items     = allItems[mesAtual.mes]||[];
   const itemsAnt  = mesAnt?(allItems[mesAnt.mes]||[]):[];
+  const receitas  = allReceitas[mesAtual.mes]||[];
 
-  const ativos   = useMemo(()=>items.filter(t=>!t.excluido),[items]);
-  const total    = useMemo(()=>ativos.reduce((s,t)=>s+t.valor,0),[ativos]);
-  const maxDia   = useMemo(()=>{const d=items.map(t=>parseInt(t.data.slice(8,10)));return d.length?Math.max(...d):31;},[items]);
-  const totalAnt = useMemo(()=>soma(itemsAnt.filter(t=>parseInt(t.data.slice(8,10))<=maxDia)),[itemsAnt,maxDia]);
-  const sorted   = useMemo(()=>[...items].sort((a,b)=>new Date(b.data)-new Date(a.data)),[items]);
-  const byCat    = useMemo(()=>{
+  // ─── Carregamento do Supabase ────────────────────────────────────────────────
+  const load = useCallback(async (silent=false) => {
+    if (!silent) setLoading(true);
+    const [dAtual, dAnt, rAtual] = await Promise.all([
+      sbGet(mesAtual.mes),
+      mesAnt ? sbGet(mesAnt.mes) : Promise.resolve([]),
+      rcGet(mesAtual.mes),
+    ]);
+    setAllItems(p => ({...p, [mesAtual.mes]: dAtual||[], ...(mesAnt ? {[mesAnt.mes]: dAnt||[]} : {})}));
+    setAllReceitas(p => ({...p, [mesAtual.mes]: rAtual||[]}));
+    setLastSync(new Date());
+    if (!silent) setLoading(false);
+  }, [mesAtual.mes, mesAnt]);
+
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (showForm || showFormReceita || editItem || delItem || delReceita || showPend) return;
+    const t = setInterval(() => load(true), 5000);
+    return () => clearInterval(t);
+  }, [load, showForm, showFormReceita, editItem, delItem, delReceita, showPend]);
+
+  const ativos     = useMemo(()=>items.filter(t=>!t.excluido),[items]);
+  const total      = useMemo(()=>ativos.reduce((s,t)=>s+t.valor,0),[ativos]);
+  const totalReceita = useMemo(()=>receitas.reduce((s,r)=>s+r.valor,0),[receitas]);
+  const saldo        = totalReceita - total;
+  const maxDia     = useMemo(()=>{const d=items.map(t=>parseInt(t.data.slice(8,10)));return d.length?Math.max(...d):31;},[items]);
+  const totalAnt   = useMemo(()=>soma(itemsAnt.filter(t=>parseInt(t.data.slice(8,10))<=maxDia)),[itemsAnt,maxDia]);
+  const sorted     = useMemo(()=>[...items].sort((a,b)=>new Date(b.data)-new Date(a.data)),[items]);
+  const sortedReceitas = useMemo(()=>[...receitas].sort((a,b)=>new Date(b.data)-new Date(a.data)),[receitas]);
+  const byCat      = useMemo(()=>{
     const m={};
     ativos.forEach(t=>{m[t.categoria]=(m[t.categoria]||0)+t.valor;});
     return Object.entries(m).map(([cat,val])=>({cat,val})).sort((a,b)=>b.val-a.val);
   },[ativos]);
+  // Dashboard "por meio de pagamento" — inclui todos os MEIOS mesmo com valor 0
+  const byMeio     = useMemo(()=>{
+    const m={};
+    MEIOS.forEach(mm=>{ m[mm]={total:0, count:0}; });
+    ativos.forEach(t=>{
+      if(!m[t.meio]) m[t.meio]={total:0, count:0};
+      m[t.meio].total += t.valor;
+      m[t.meio].count += 1;
+    });
+    return Object.entries(m).map(([meio,d])=>({meio, val:d.total, count:d.count})).sort((a,b)=>b.val-a.val);
+  },[ativos]);
+  // Fluxo semanal — receita, despesa e saldo por semana do mês
+  const fluxoSemanal = useMemo(()=>{
+    const semanas = semanasDoMes(mesAtual.mes);
+    return semanas.map(sem=>{
+      const rec = receitas.filter(r=>{
+        const d=parseInt(r.data.slice(8,10));
+        return d>=sem.ini && d<=sem.fim;
+      }).reduce((s,r)=>s+r.valor,0);
+      const desp = ativos.filter(t=>{
+        const d=parseInt(t.data.slice(8,10));
+        return d>=sem.ini && d<=sem.fim;
+      }).reduce((s,t)=>s+t.valor,0);
+      return {...sem, receita:rec, despesa:desp, saldo:rec-desp};
+    });
+  },[receitas,ativos,mesAtual.mes]);
   const pendencias = useMemo(()=>{
     if(isFechado||!mesAnt) return [];
     return itemsAnt.filter(t=>t.recorrente&&!t.excluido)
       .filter(base=>!items.some(t=>t.descricao===base.descricao&&!t.excluido));
   },[items,itemsAnt,mesAnt,isFechado]);
-
   const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(null),2500);};
   const setItems=fn=>setAllItems(p=>({...p,[mesAtual.mes]:typeof fn==="function"?fn(p[mesAtual.mes]||[]):fn}));
+  const setReceitas=fn=>setAllReceitas(p=>({...p,[mesAtual.mes]:typeof fn==="function"?fn(p[mesAtual.mes]||[]):fn}));
   const goMes=dir=>{setMesIdx(i=>i+dir);setShowPicker(false);setShowPend(false);};
-
   const validar=f=>{
     const e={};
     if(!f.descricao.trim())                            e.descricao    ="Campo obrigatório";
@@ -465,55 +506,98 @@ export default function App() {
     }
     return e;
   };
-
-  const inserirRecorrentes=(novoItem,f)=>{
-    if(!f.recorrente) return;
-    const reps=parseInt(f.repeticoes),dia=parseInt(f.diaVencimento);
-    const [ano,mes]=mesAtual.mes.split("-").map(Number);
-    const updates={};
-    for(let i=1;i<=reps;i++){
-      let nm=mes+i,na=ano;
-      if(nm>12){nm-=12;na++;}
-      const key=`${na}-${padN(nm)}`;
-      if(!MESES.find(m=>m.mes===key)) continue;
-      updates[key]=[...(updates[key]||[]),{id:Date.now()+i,descricao:novoItem.descricao,valor:novoItem.valor,categoria:novoItem.categoria,classe:"Empresa",meio:novoItem.meio,data:`${key}-${padN(dia)}`,obs:novoItem.obs,excluido:false,motivoExclusao:"",recorrente:true}];
-    }
-    if(Object.keys(updates).length)
-      setAllItems(p=>{const u={...p};Object.entries(updates).forEach(([k,v])=>{u[k]=[...(u[k]||[]),...v];});return u;});
+  const validarReceita=f=>{
+    const e={};
+    if(!f.descricao.trim())                            e.descricao ="Campo obrigatório";
+    if(!f.valorDigits||parseInt(f.valorDigits)===0)    e.valor     ="Campo obrigatório";
+    if(!f.data)                                        e.data      ="Campo obrigatório";
+    return e;
   };
-
-  const lancar=()=>{
+  const lancar=async ()=>{
     const e=validar(form);
     if(Object.keys(e).length){setErro(e);return;}
-    const novo={id:Date.now(),descricao:form.descricao.trim(),valor:d2float(form.valorDigits),categoria:form.categoria,classe:"Empresa",meio:form.meio,data:form.data,obs:form.obs,excluido:false,motivoExclusao:"",recorrente:form.recorrente};
-    setItems(p=>[...p,novo]);
-    inserirRecorrentes(novo,form);
+    const valor = d2float(form.valorDigits);
+    const item = {
+      id: uid(),
+      cliente_id: CID,
+      mes: form.data.slice(0,7),
+      centro: "empresa",
+      categoria: form.categoria,
+      descricao: form.descricao.trim(),
+      valor,
+      meio: form.meio,
+      data: form.data,
+      obs: form.obs,
+      excluido: false,
+      recorrente: form.recorrente,
+      motivo_exclusao: "",
+    };
+    const res = await sbPost(item);
+    if(res && form.recorrente){
+      const reps=parseInt(form.repeticoes), dia=parseInt(form.diaVencimento);
+      const [ano,mes]=form.data.slice(0,7).split("-").map(Number);
+      for(let i=1;i<=reps;i++){
+        let nm=mes+i, na=ano;
+        while(nm>12){nm-=12;na++;}
+        const key=`${na}-${padN(nm)}`;
+        const novaData=`${key}-${padN(dia)}`;
+        await sbPost({id:uid(),cliente_id:CID,mes:key,centro:"empresa",categoria:form.categoria,descricao:form.descricao.trim(),valor,meio:form.meio,data:novaData,obs:form.obs,excluido:false,recorrente:true,motivo_exclusao:""});
+      }
+    }
     setShowForm(false);
+    load();
     showToast(form.recorrente?`✓ Registrado + ${form.repeticoes}x inserido(s) automaticamente`:"✓ Lançamento registrado");
   };
-
+  const lancarReceita=async ()=>{
+    const e=validarReceita(formReceita);
+    if(Object.keys(e).length){setErroReceita(e);return;}
+    const payload={
+      id: uid(),
+      cliente_id: CID,
+      mes: formReceita.data.slice(0,7),
+      semana: formReceita.data,
+      valor: d2float(formReceita.valorDigits),
+      descricao: formReceita.descricao.trim(),
+      obs: formReceita.obs,
+      data_lancamento: hoje(),
+    };
+    const res = await rcPost(payload);
+    setShowFormReceita(false);
+    if(res){ load(); showToast("✓ Receita registrada"); }
+  };
   const openEdit=item=>{
     setForm({descricao:item.descricao,valorDigits:float2d(item.valor),categoria:item.categoria,meio:item.meio,data:item.data,obs:item.obs||"",recorrente:false,periodicidade:"Mensal",diaVencimento:"",repeticoes:null});
     setErro({});setEditItem(item);
   };
-
-  const salvarEdicao=()=>{
+  const salvarEdicao=async ()=>{
     const e=validar(form);
     if(Object.keys(e).length){setErro(e);return;}
-    setItems(p=>p.map(t=>t.id===editItem.id?{...t,descricao:form.descricao.trim(),valor:d2float(form.valorDigits),categoria:form.categoria,meio:form.meio,data:form.data,obs:form.obs}:t));
-    setEditItem(null);showToast("✓ Lançamento atualizado");
+    const ok = await sbPatch(editItem.id, {
+      descricao: form.descricao.trim(),
+      valor: d2float(form.valorDigits),
+      categoria: form.categoria,
+      meio: form.meio,
+      data: form.data,
+      mes: form.data.slice(0,7),
+      obs: form.obs,
+    });
+    setEditItem(null);
+    if(ok){ load(); showToast("✓ Lançamento atualizado"); }
   };
-
-  const confirmarExclusao=()=>{
+  const confirmarExclusao=async ()=>{
     if(!motivoExc.trim()){setMotivoErr(true);return;}
-    setItems(p=>p.map(t=>t.id===delItem.id?{...t,excluido:true,motivoExclusao:motivoExc.trim()}:t));
-    setDelItem(null);setMotivoExc("");setMotivoErr(false);showToast("Lançamento excluído");
+    const ok = await sbPatch(delItem.id, { excluido: true, motivo_exclusao: motivoExc.trim() });
+    setDelItem(null);setMotivoExc("");setMotivoErr(false);
+    if(ok){ load(); showToast("Lançamento excluído"); }
   };
-
-  const anyModal=showForm||!!editItem||!!delItem;
+  const confirmarExclusaoReceita=async ()=>{
+    const ok = await rcDelete(delReceita.id);
+    setDelReceita(null);
+    if(ok){ load(); showToast("Receita excluída"); }
+  };
+  const anyModal=showForm||showFormReceita||!!editItem||!!delItem||!!delReceita;
   const card={background:"#fff",borderRadius:14,padding:"4px 16px",boxShadow:"0 2px 8px #2980B910",marginBottom:12};
   const rowDiv=last=>({padding:"13px 0",borderBottom:last?"none":"1px solid #EBF5FB",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10});
-
   const LancRow=({t,last,showEdit})=>(
     <div className={`row-item${t.excluido?" row-excluido":""}`} style={rowDiv(last)}>
       <div style={{display:"flex",gap:10,alignItems:"center",flex:1,minWidth:0}}>
@@ -541,18 +625,46 @@ export default function App() {
       </div>
     </div>
   );
-
+  const ReceitaRow=({r,last})=>(
+    <div className="row-item" style={rowDiv(last)}>
+      <div style={{display:"flex",gap:10,alignItems:"center",flex:1,minWidth:0}}>
+        <div style={{width:4,height:40,background:"#27AE60",borderRadius:3,flexShrink:0}}/>
+        <div style={{minWidth:0}}>
+          <div style={{fontSize:14,color:"#1A5276",fontWeight:700,fontFamily:"'Nunito',sans-serif",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.descricao}</div>
+          <div style={{fontSize:11,color:"#A9B7C6",fontFamily:"'Nunito',sans-serif",marginTop:2}}>{fmtDate(r.data)}</div>
+          {r.obs&&<div style={{fontSize:11,color:"#A9B7C6",marginTop:1,fontStyle:"italic",fontFamily:"'Nunito',sans-serif"}}>{r.obs}</div>}
+        </div>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+        <div style={{fontSize:15,fontWeight:800,color:"#27AE60",fontFamily:"'Nunito',sans-serif"}}>{fmt(r.valor)}</div>
+        {!isFechado&&(
+          <button className="icon-btn icon-btn-danger" onClick={()=>setDelReceita(r)} title="Excluir">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>
+            </svg>
+          </button>
+        )}
+      </div>
+    </div>
+  );
   return (
     <div style={{fontFamily:"'Nunito',sans-serif",background:"#F0F6FF",minHeight:"100vh",color:"#1A5276",maxWidth:480,margin:"0 auto"}}>
       <style>{CSS}</style>
-
       {/* HEADER */}
       <div style={{background:"#fff",borderBottom:"1px solid #D5E8F5",padding:"12px 20px 0",position:"sticky",top:0,zIndex:50,boxShadow:"0 2px 12px #2980B910"}}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
           <Logo size={46}/>
           <div style={{flex:1}}>
             <div style={{fontSize:18,fontWeight:900,color:"#1A5276",lineHeight:1.1}}>CRIAR</div>
-            <div style={{fontSize:11,color:"#A9B7C6",letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:600}}>Centro Educacional</div>
+            <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+              <span style={{fontSize:11,color:"#A9B7C6",letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:600}}>Centro Educacional</span>
+              {lastSync && (
+                <span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#EAFAF1",border:"1px solid #27AE6033",borderRadius:16,padding:"2px 8px",fontSize:9,color:"#27AE60",fontWeight:700,letterSpacing:"0.04em"}}>
+                  <span style={{width:5,height:5,background:"#27AE60",borderRadius:"50%"}}/>
+                  {loading ? "Sync" : "Online"}
+                </span>
+              )}
+            </div>
           </div>
           <button className={`notif-btn${pendencias.length>0?" has-pending":""}`} onClick={()=>setShowPend(o=>!o)} title="Recorrências pendentes">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -581,7 +693,7 @@ export default function App() {
           </div>
         </div>
         <nav style={{display:"flex",marginTop:2}}>
-          {[["inicio","Início"],["categorias","Categorias"],["historico","Histórico"]].map(([v,l])=>(
+          {[["inicio","Início"],["caixa","Caixa"],["categorias","Categorias"],["historico","Histórico"]].map(([v,l])=>(
             <button key={v} className="tab" onClick={()=>setView(v)}
               style={{flex:1,background:"none",border:"none",borderBottom:view===v?"2.5px solid #2980B9":"2.5px solid transparent",color:view===v?"#2980B9":"#A9B7C6",padding:"10px 4px",fontSize:12,letterSpacing:"0.1em",textTransform:"uppercase",cursor:"pointer",fontFamily:"'Nunito',sans-serif",fontWeight:800,transition:"all .2s"}}>
               {l}
@@ -589,7 +701,6 @@ export default function App() {
           ))}
         </nav>
       </div>
-
       {/* PENDÊNCIAS */}
       {showPend&&(
         <div className="overlay-top" onClick={e=>{if(e.target===e.currentTarget)setShowPend(false);}}>
@@ -625,7 +736,6 @@ export default function App() {
           </div>
         </div>
       )}
-
       {/* CONTEÚDO */}
       <div style={{padding:"20px 16px 120px"}}>
         {view==="inicio"&&(
@@ -662,10 +772,96 @@ export default function App() {
             </div>
           </>
         )}
-
+        {view==="caixa"&&(
+          <>
+            {/* KPIs principais */}
+            <div style={{background:"#fff",borderRadius:16,padding:"20px",marginBottom:14,boxShadow:"0 2px 12px #2980B910"}}>
+              <div style={{fontSize:11,letterSpacing:"0.15em",color:"#A9B7C6",textTransform:"uppercase",marginBottom:12,fontWeight:700}}>Fluxo de Caixa — {mesAtual.label}</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+                <div style={{background:"#EAFAF1",borderRadius:12,padding:"14px",border:"1px solid #A9DFBF"}}>
+                  <div style={{fontSize:9,letterSpacing:"0.15em",color:"#1E8449",textTransform:"uppercase",fontWeight:800,marginBottom:4}}>Receita</div>
+                  <div style={{fontSize:22,fontWeight:900,color:"#1E8449",lineHeight:1}}>{fmt(totalReceita)}</div>
+                  <div style={{fontSize:10,color:"#7F8C8D",marginTop:4,fontWeight:600}}>{receitas.length} entrada(s)</div>
+                </div>
+                <div style={{background:"#FDEDEC",borderRadius:12,padding:"14px",border:"1px solid #F5B7B1"}}>
+                  <div style={{fontSize:9,letterSpacing:"0.15em",color:"#B03A2E",textTransform:"uppercase",fontWeight:800,marginBottom:4}}>Despesa</div>
+                  <div style={{fontSize:22,fontWeight:900,color:"#B03A2E",lineHeight:1}}>{fmt(total)}</div>
+                  <div style={{fontSize:10,color:"#7F8C8D",marginTop:4,fontWeight:600}}>{ativos.length} saída(s)</div>
+                </div>
+              </div>
+              <div style={{background:saldo>=0?"#EBF5FB":"#FEF5EC",borderRadius:12,padding:"16px 18px",border:`2px solid ${saldo>=0?"#2980B9":"#E67E22"}`}}>
+                <div style={{fontSize:10,letterSpacing:"0.15em",color:saldo>=0?"#2980B9":"#B7620F",textTransform:"uppercase",fontWeight:800,marginBottom:4}}>Saldo do Mês</div>
+                <div style={{display:"flex",alignItems:"baseline",gap:10}}>
+                  <div style={{fontSize:28,fontWeight:900,color:saldo>=0?"#2980B9":"#B7620F",lineHeight:1}}>{fmt(saldo)}</div>
+                  <div style={{fontSize:11,color:"#7F8C8D",fontWeight:700}}>{saldo>=0?"positivo":"negativo"}</div>
+                </div>
+              </div>
+            </div>
+            {/* Grid semanal */}
+            <div style={{fontSize:10,color:"#A9B7C6",letterSpacing:"0.2em",textTransform:"uppercase",marginBottom:10,fontWeight:700}}>Fluxo Semanal</div>
+            <div style={{...card,padding:"8px 4px"}}>
+              <div style={{display:"grid",gridTemplateColumns:"1.1fr 1fr 1fr 1fr",gap:6,padding:"8px 10px",borderBottom:"1px solid #EBF5FB"}}>
+                <div style={{fontSize:9,color:"#7F8C8D",fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase"}}>Semana</div>
+                <div style={{fontSize:9,color:"#1E8449",fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase",textAlign:"right"}}>Receita</div>
+                <div style={{fontSize:9,color:"#B03A2E",fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase",textAlign:"right"}}>Despesa</div>
+                <div style={{fontSize:9,color:"#2980B9",fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase",textAlign:"right"}}>Saldo</div>
+              </div>
+              {fluxoSemanal.map((sem,i)=>(
+                <div key={i} style={{display:"grid",gridTemplateColumns:"1.1fr 1fr 1fr 1fr",gap:6,padding:"10px 10px",borderBottom:i===fluxoSemanal.length-1?"none":"1px solid #F0F6FF",alignItems:"center"}}>
+                  <div>
+                    <div style={{fontSize:12,color:"#1A5276",fontWeight:800}}>{sem.label}</div>
+                    <div style={{fontSize:10,color:"#A9B7C6",fontWeight:600,marginTop:1}}>dia {sem.ini}–{sem.fim}</div>
+                  </div>
+                  <div style={{fontSize:12,color:sem.receita>0?"#1E8449":"#D5E8F5",fontWeight:800,textAlign:"right"}}>{fmt(sem.receita)}</div>
+                  <div style={{fontSize:12,color:sem.despesa>0?"#B03A2E":"#D5E8F5",fontWeight:800,textAlign:"right"}}>{fmt(sem.despesa)}</div>
+                  <div style={{fontSize:12,color:sem.saldo===0?"#D5E8F5":(sem.saldo>0?"#2980B9":"#E67E22"),fontWeight:900,textAlign:"right"}}>{fmt(sem.saldo)}</div>
+                </div>
+              ))}
+            </div>
+            {/* Lista de receitas */}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:20,marginBottom:10}}>
+              <div style={{fontSize:10,color:"#A9B7C6",letterSpacing:"0.2em",textTransform:"uppercase",fontWeight:700}}>Recebimentos do Mês</div>
+              <div style={{fontSize:11,color:"#A9B7C6",fontWeight:700}}>{receitas.length} entrada(s)</div>
+            </div>
+            <div style={card}>
+              {sortedReceitas.length===0
+                ?<div style={{padding:"24px 0",textAlign:"center"}}>
+                  <div style={{fontSize:32,marginBottom:8}}>💰</div>
+                  <div style={{color:"#A9B7C6",fontSize:14,fontFamily:"'Nunito',sans-serif",fontWeight:700}}>Nenhum recebimento neste mês.</div>
+                  {!isFechado&&<div style={{color:"#A9B7C6",fontSize:12,marginTop:4,fontFamily:"'Nunito',sans-serif"}}>Toque em "Nova Receita" abaixo</div>}
+                </div>
+                :sortedReceitas.map((r,i)=><ReceitaRow key={r.id} r={r} last={i===sortedReceitas.length-1}/>)
+              }
+            </div>
+          </>
+        )}
         {view==="categorias"&&(
           <>
-            <div style={{fontSize:22,fontWeight:900,color:"#1A5276",marginBottom:18,fontFamily:"'Nunito',sans-serif"}}>Por Categoria</div>
+            {/* Dashboard: Por meio de pagamento */}
+            <div style={{fontSize:22,fontWeight:900,color:"#1A5276",marginBottom:6,fontFamily:"'Nunito',sans-serif"}}>Por Meio de Pagamento</div>
+            <div style={{fontSize:11,color:"#A9B7C6",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:12,fontWeight:600}}>{mesAtual.label}</div>
+            <div style={card}>
+              {total===0
+                ?<div style={{padding:"24px 0",textAlign:"center"}}><div style={{fontSize:32,marginBottom:8}}>💳</div><div style={{color:"#A9B7C6",fontSize:14,fontFamily:"'Nunito',sans-serif",fontWeight:700}}>Nenhum lançamento neste mês.</div></div>
+                :byMeio.map(({meio,val,count},i)=>(
+                  <div key={meio} style={{padding:"12px 0",borderBottom:i===byMeio.length-1?"none":"1px solid #EBF5FB"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:6,alignItems:"center"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <div style={{width:10,height:10,borderRadius:"50%",background:MEIO_CORES[meio]||"#999",flexShrink:0}}/>
+                        <span style={{fontSize:14,color:"#1A5276",fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{meio}</span>
+                      </div>
+                      <span style={{fontSize:14,fontWeight:800,color:val>0?"#1A5276":"#D5E8F5",fontFamily:"'Nunito',sans-serif"}}>{fmt(val)}</span>
+                    </div>
+                    <Bar percent={total>0?(val/total)*100:0} color={MEIO_CORES[meio]||"#999"}/>
+                    <div style={{fontSize:10,color:"#A9B7C6",marginTop:4,fontFamily:"'Nunito',sans-serif",fontWeight:600}}>
+                      {total>0?((val/total)*100).toFixed(1):0}% do total · {count} lançamento{count===1?"":"s"}
+                    </div>
+                  </div>
+                ))
+              }
+            </div>
+            {/* Por Categoria (existente, colapsível) */}
+            <div style={{fontSize:22,fontWeight:900,color:"#1A5276",marginTop:22,marginBottom:18,fontFamily:"'Nunito',sans-serif"}}>Por Categoria</div>
             {byCat.length===0
               ?<div style={{...card,padding:24,textAlign:"center"}}><div style={{fontSize:32,marginBottom:8}}>📂</div><div style={{color:"#A9B7C6",fontSize:14,fontFamily:"'Nunito',sans-serif",fontWeight:700}}>Nenhum lançamento neste mês.</div></div>
               :byCat.map(({cat,val})=>(
@@ -678,7 +874,6 @@ export default function App() {
             }
           </>
         )}
-
         {view==="historico"&&(
           <>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
@@ -694,13 +889,17 @@ export default function App() {
           </>
         )}
       </div>
-
-      {!anyModal&&!showPend&&!isFechado&&(
+      {/* FAB — muda conforme aba */}
+      {!anyModal&&!showPend&&!isFechado&&view!=="caixa"&&(
         <button className="fab" onClick={()=>{setForm(emptyForm());setErro({});setShowForm(true);}}>
           <span style={{fontSize:20,lineHeight:1}}>+</span> Novo Lançamento
         </button>
       )}
-
+      {!anyModal&&!showPend&&!isFechado&&view==="caixa"&&(
+        <button className="fab fab-green" onClick={()=>{setFormReceita(emptyFormReceita());setErroReceita({});setShowFormReceita(true);}}>
+          <span style={{fontSize:20,lineHeight:1}}>+</span> Nova Receita
+        </button>
+      )}
       {showForm&&(
         <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)setShowForm(false);}}>
           <div className="sheet">
@@ -713,7 +912,19 @@ export default function App() {
           </div>
         </div>
       )}
-
+      {showFormReceita&&(
+        <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)setShowFormReceita(false);}}>
+          <div className="sheet">
+            <div className="handle"/>
+            <div style={{fontSize:20,fontWeight:900,color:"#1E8449",marginBottom:4,fontFamily:"'Nunito',sans-serif"}}>Nova Receita</div>
+            <div style={{fontSize:11,color:"#A9B7C6",marginBottom:18,fontFamily:"'Nunito',sans-serif"}}>Registro de recebimento em caixa</div>
+            <FormBodyReceita form={formReceita} setForm={setFormReceita} erro={erroReceita} setErro={setErroReceita}/>
+            <div style={{height:16}}/>
+            <button className="btn-success" onClick={lancarReceita}>Registrar Receita</button>
+            <button className="btn-ghost" onClick={()=>setShowFormReceita(false)}>Cancelar</button>
+          </div>
+        </div>
+      )}
       {editItem&&(
         <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)setEditItem(null);}}>
           <div className="sheet">
@@ -728,7 +939,6 @@ export default function App() {
           </div>
         </div>
       )}
-
       {delItem&&(
         <div className="overlay" onClick={e=>{if(e.target===e.currentTarget){setDelItem(null);setMotivoExc("");setMotivoErr(false);}}}>
           <div className="sheet">
@@ -749,7 +959,21 @@ export default function App() {
           </div>
         </div>
       )}
-
+      {delReceita&&(
+        <div className="overlay" onClick={e=>{if(e.target===e.currentTarget)setDelReceita(null);}}>
+          <div className="sheet">
+            <div className="handle"/>
+            <div style={{fontSize:18,fontWeight:900,color:"#E74C3C",marginBottom:6,fontFamily:"'Nunito',sans-serif"}}>Excluir Receita</div>
+            <div style={{fontSize:14,color:"#1A5276",marginBottom:2,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{delReceita.descricao}</div>
+            <div style={{fontSize:13,color:"#A9B7C6",marginBottom:20,fontFamily:"'Nunito',sans-serif"}}>{fmt(delReceita.valor)} · {fmtDate(delReceita.data)}</div>
+            <div style={{background:"#FDEDEC",border:"1px solid #F1948A33",borderRadius:10,padding:"12px 14px",marginBottom:20,fontSize:13,color:"#E74C3C",fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
+              Este recebimento será removido do fluxo de caixa.
+            </div>
+            <button className="btn-primary" style={{background:"#E74C3C"}} onClick={confirmarExclusaoReceita}>Confirmar Exclusão</button>
+            <button className="btn-ghost" onClick={()=>setDelReceita(null)}>Cancelar</button>
+          </div>
+        </div>
+      )}
       {toast&&<div className="toast">{toast}</div>}
     </div>
   );
