@@ -55,6 +55,7 @@ const CATEGORIAS = [
   "Compromissos Financeiros",
   "Impostos",
   "Infraestrutura",
+  "Liquidação de Fatura",
   "Material Didático",
   "Mensalidades",
   "Obra",
@@ -74,6 +75,7 @@ const CAT_CORES = {
   "Compromissos Financeiros":"#C0392B",
   "Impostos":                "#7D3C98",
   "Infraestrutura":          "#2980B9",
+  "Liquidação de Fatura":    "#5D6D7E",
   "Material Didático":       "#8E44AD",
   "Mensalidades":            "#27AE60",
   "Obra":                    "#B03A2E",
@@ -105,7 +107,7 @@ const hoje    = () => new Date().toISOString().slice(0,10);
 const d2brl   = d => { const n=parseInt(d||"0",10); return `${Math.floor(n/100).toLocaleString("pt-BR")},${String(n%100).padStart(2,"0")}`; };
 const d2float = d => parseInt(d||"0",10)/100;
 const float2d = v => String(Math.round(v*100));
-const soma    = arr => arr.filter(t=>!t.excluido).reduce((s,t)=>s+t.valor,0);
+const soma    = arr => arr.filter(t=>!t.excluido && t.categoria!=="Liquidação de Fatura").reduce((s,t)=>s+t.valor,0);
 const padN    = n => String(n).padStart(2,"0");
 // Retorna 5 faixas semanais do mês: [{ini, fim, label}]
 const semanasDoMes = mesKey => {
@@ -445,7 +447,8 @@ export default function App() {
   }, [load, showForm, showFormReceita, editItem, delItem, delReceita, showPend]);
 
   const ativos     = useMemo(()=>items.filter(t=>!t.excluido),[items]);
-  const total      = useMemo(()=>ativos.reduce((s,t)=>s+t.valor,0),[ativos]);
+  const contaveis  = useMemo(()=>ativos.filter(t=>t.categoria!=="Liquidação de Fatura"),[ativos]);
+  const total      = useMemo(()=>contaveis.reduce((s,t)=>s+t.valor,0),[contaveis]);
   const totalReceita = useMemo(()=>receitas.reduce((s,r)=>s+r.valor,0),[receitas]);
   const saldo        = totalReceita - total;
   const maxDia     = useMemo(()=>{const d=items.map(t=>parseInt(t.data.slice(8,10)));return d.length?Math.max(...d):31;},[items]);
@@ -454,14 +457,14 @@ export default function App() {
   const sortedReceitas = useMemo(()=>[...receitas].sort((a,b)=>new Date(b.data)-new Date(a.data)),[receitas]);
   const byCat      = useMemo(()=>{
     const m={};
-    ativos.forEach(t=>{m[t.categoria]=(m[t.categoria]||0)+t.valor;});
+    contaveis.forEach(t=>{m[t.categoria]=(m[t.categoria]||0)+t.valor;});
     return Object.entries(m).map(([cat,val])=>({cat,val})).sort((a,b)=>b.val-a.val);
-  },[ativos]);
+  },[contaveis]);
   // Dashboard "por meio de pagamento" — inclui todos os MEIOS mesmo com valor 0
   const byMeio     = useMemo(()=>{
     const m={};
     MEIOS.forEach(mm=>{ m[mm]={total:0, count:0}; });
-    ativos.forEach(t=>{
+    contaveis.forEach(t=>{
       if(!m[t.meio]) m[t.meio]={total:0, count:0};
       m[t.meio].total += t.valor;
       m[t.meio].count += 1;
@@ -476,7 +479,7 @@ export default function App() {
         const d=parseInt(r.data.slice(8,10));
         return d>=sem.ini && d<=sem.fim;
       }).reduce((s,r)=>s+r.valor,0);
-      const desp = ativos.filter(t=>{
+      const desp = contaveis.filter(t=>{
         const d=parseInt(t.data.slice(8,10));
         return d>=sem.ini && d<=sem.fim;
       }).reduce((s,t)=>s+t.valor,0);
@@ -607,6 +610,7 @@ export default function App() {
           <div style={{display:"flex",gap:6,alignItems:"center",marginTop:2,flexWrap:"wrap"}}>
             <span style={{fontSize:11,color:"#A9B7C6",fontFamily:"'Nunito',sans-serif"}}>{fmtDate(t.data)} · {t.categoria} · {t.meio}</span>
             {t.recorrente&&!t.excluido&&<span className="badge" style={{background:"#EBF5FB",color:"#2980B9",border:"1px solid #AED6F1"}}>↻ Recorrente</span>}
+            {t.categoria==="Liquidação de Fatura"&&!t.excluido&&<span className="badge" style={{background:"#EBF5FB",color:"#2980B9",border:"1px solid #AED6F1"}}>Liquidação</span>}
           </div>
           {t.obs&&!t.excluido&&<div style={{fontSize:11,color:"#A9B7C6",marginTop:1,fontStyle:"italic",fontFamily:"'Nunito',sans-serif"}}>{t.obs}</div>}
           {t.excluido&&<span className="badge" style={{background:"#FDEDEC",color:"#E74C3C",border:"1px solid #F1948A"}}>Valor excluído da soma de valores</span>}
@@ -746,7 +750,7 @@ export default function App() {
                 <div style={{fontSize:40,fontWeight:900,color:"#1A5276",lineHeight:1}}>{fmt(total)}</div>
                 {mesAnt&&totalAnt>0&&<Comparativo atual={total} anterior={totalAnt} isParcial={!isFechado}/>}
               </div>
-              <div style={{fontSize:12,color:"#A9B7C6",marginTop:8,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:600}}>{ativos.length} lançamentos ativos</div>
+              <div style={{fontSize:12,color:"#A9B7C6",marginTop:8,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:600}}>{contaveis.length} lançamentos ativos</div>
               {mesAnt&&totalAnt>0&&<div style={{fontSize:10,color:"#D5E8F5",marginTop:4,fontFamily:"'Nunito',sans-serif"}}>Ref.: {mesAnt.label}{!isFechado?` (dias 1–${maxDia})`:""}</div>}
             </div>
             <div style={{fontSize:10,color:"#A9B7C6",letterSpacing:"0.2em",textTransform:"uppercase",marginBottom:10,fontWeight:700}}>Despesas por Categoria</div>
@@ -764,7 +768,7 @@ export default function App() {
                     </div>
                     <Bar percent={total>0?(val/total)*100:0} color={CAT_CORES[cat]||"#999"}/>
                     <div style={{fontSize:10,color:"#A9B7C6",marginTop:4,fontFamily:"'Nunito',sans-serif",fontWeight:600}}>
-                      {total>0?((val/total)*100).toFixed(1):0}% do total · {ativos.filter(t=>t.categoria===cat).length} lançamentos
+                      {total>0?((val/total)*100).toFixed(1):0}% do total · {contaveis.filter(t=>t.categoria===cat).length} lançamentos
                     </div>
                   </div>
                 ))
@@ -786,7 +790,7 @@ export default function App() {
                 <div style={{background:"#FDEDEC",borderRadius:12,padding:"14px",border:"1px solid #F5B7B1"}}>
                   <div style={{fontSize:9,letterSpacing:"0.15em",color:"#B03A2E",textTransform:"uppercase",fontWeight:800,marginBottom:4}}>Despesa</div>
                   <div style={{fontSize:22,fontWeight:900,color:"#B03A2E",lineHeight:1}}>{fmt(total)}</div>
-                  <div style={{fontSize:10,color:"#7F8C8D",marginTop:4,fontWeight:600}}>{ativos.length} saída(s)</div>
+                  <div style={{fontSize:10,color:"#7F8C8D",marginTop:4,fontWeight:600}}>{contaveis.length} saída(s)</div>
                 </div>
               </div>
               <div style={{background:saldo>=0?"#EBF5FB":"#FEF5EC",borderRadius:12,padding:"16px 18px",border:`2px solid ${saldo>=0?"#2980B9":"#E67E22"}`}}>
@@ -865,7 +869,7 @@ export default function App() {
             {byCat.length===0
               ?<div style={{...card,padding:24,textAlign:"center"}}><div style={{fontSize:32,marginBottom:8}}>📂</div><div style={{color:"#A9B7C6",fontSize:14,fontFamily:"'Nunito',sans-serif",fontWeight:700}}>Nenhum lançamento neste mês.</div></div>
               :byCat.map(({cat,val})=>(
-                <CollapsibleSection key={cat} label={cat} count={ativos.filter(t=>t.categoria===cat).length} valor={val} color={CAT_CORES[cat]||"#999"}>
+                <CollapsibleSection key={cat} label={cat} count={contaveis.filter(t=>t.categoria===cat).length} valor={val} color={CAT_CORES[cat]||"#999"}>
                   <div style={{...card,marginTop:0}}>
                     {sorted.filter(t=>t.categoria===cat).map((t,i,arr)=><LancRow key={t.id} t={t} last={i===arr.length-1} showEdit={false}/>)}
                   </div>
