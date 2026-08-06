@@ -30,7 +30,7 @@ async function sbPatch(id, body) {
 }
 async function rcGet(mes) {
   try {
-    const r = await fetch(`${SUPA_URL}/rest/v1/receitas?cliente_id=eq.${CID}&mes=eq.${mes}&order=data.desc`, { headers: H });
+    const r = await fetch(`${SUPA_URL}/rest/v1/receitas?cliente_id=eq.${CID}&mes=eq.${mes}&order=semana.desc`, { headers: H });
     return r.ok ? r.json() : [];
   } catch { return []; }
 }
@@ -454,7 +454,7 @@ export default function App() {
   const maxDia     = useMemo(()=>{const d=items.map(t=>parseInt(t.data.slice(8,10)));return d.length?Math.max(...d):31;},[items]);
   const totalAnt   = useMemo(()=>soma(itemsAnt.filter(t=>parseInt(t.data.slice(8,10))<=maxDia)),[itemsAnt,maxDia]);
   const sorted     = useMemo(()=>[...items].sort((a,b)=>new Date(b.data)-new Date(a.data)),[items]);
-  const sortedReceitas = useMemo(()=>[...receitas].sort((a,b)=>new Date(b.data)-new Date(a.data)),[receitas]);
+  const sortedReceitas = useMemo(()=>[...receitas].sort((a,b)=>new Date(b.semana)-new Date(a.semana)),[receitas]);
   const byCat      = useMemo(()=>{
     const m={};
     contaveis.forEach(t=>{m[t.categoria]=(m[t.categoria]||0)+t.valor;});
@@ -476,7 +476,7 @@ export default function App() {
     const semanas = semanasDoMes(mesAtual.mes);
     return semanas.map(sem=>{
       const rec = receitas.filter(r=>{
-        const d=parseInt(r.data.slice(8,10));
+        const d=parseInt(r.semana.slice(8,10));
         return d>=sem.ini && d<=sem.fim;
       }).reduce((s,r)=>s+r.valor,0);
       const desp = contaveis.filter(t=>{
@@ -635,7 +635,7 @@ export default function App() {
         <div style={{width:4,height:40,background:"#27AE60",borderRadius:3,flexShrink:0}}/>
         <div style={{minWidth:0}}>
           <div style={{fontSize:14,color:"#1A5276",fontWeight:700,fontFamily:"'Nunito',sans-serif",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.descricao}</div>
-          <div style={{fontSize:11,color:"#A9B7C6",fontFamily:"'Nunito',sans-serif",marginTop:2}}>{fmtDate(r.data)}</div>
+          <div style={{fontSize:11,color:"#A9B7C6",fontFamily:"'Nunito',sans-serif",marginTop:2}}>{fmtDate(r.semana)}</div>
           {r.obs&&<div style={{fontSize:11,color:"#A9B7C6",marginTop:1,fontStyle:"italic",fontFamily:"'Nunito',sans-serif"}}>{r.obs}</div>}
         </div>
       </div>
@@ -969,7 +969,7 @@ export default function App() {
             <div className="handle"/>
             <div style={{fontSize:18,fontWeight:900,color:"#E74C3C",marginBottom:6,fontFamily:"'Nunito',sans-serif"}}>Excluir Receita</div>
             <div style={{fontSize:14,color:"#1A5276",marginBottom:2,fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>{delReceita.descricao}</div>
-            <div style={{fontSize:13,color:"#A9B7C6",marginBottom:20,fontFamily:"'Nunito',sans-serif"}}>{fmt(delReceita.valor)} · {fmtDate(delReceita.data)}</div>
+            <div style={{fontSize:13,color:"#A9B7C6",marginBottom:20,fontFamily:"'Nunito',sans-serif"}}>{fmt(delReceita.valor)} · {fmtDate(delReceita.semana)}</div>
             <div style={{background:"#FDEDEC",border:"1px solid #F1948A33",borderRadius:10,padding:"12px 14px",marginBottom:20,fontSize:13,color:"#E74C3C",fontWeight:700,fontFamily:"'Nunito',sans-serif"}}>
               Este recebimento será removido do fluxo de caixa.
             </div>
