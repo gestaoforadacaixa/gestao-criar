@@ -92,14 +92,28 @@ const MEIO_CORES = {
   "Pix":           "#00B894",
   "Transferência": "#E67E22",
 };
-const MESES = [
-  { label:"Abril 2026",    mes:"2026-04", fechado:true  },
-  { label:"Maio 2026",     mes:"2026-05", fechado:true  },
-  { label:"Junho 2026",    mes:"2026-06", fechado:false },
-  { label:"Julho 2026",    mes:"2026-07", fechado:false },
-  { label:"Agosto 2026",   mes:"2026-08", fechado:false },
-  { label:"Setembro 2026", mes:"2026-09", fechado:false },
-];
+// ─── Meses do sistema — gerado automaticamente, nunca precisa editar ─────────
+// MES_INICIO = primeiro mês com dados no sistema (não mexer nunca)
+// FECHADOS   = meses que já foram encerrados manualmente pelo usuário
+//              (para adicionar um mês fechado no futuro, só incluir a chave
+//              "AAAA-MM" nessa lista)
+const MES_INICIO = "2026-04";
+const FECHADOS   = ["2026-04","2026-05"];
+const MESES_NOMES_FULL = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+function gerarMeses(){
+  const [ay,am] = MES_INICIO.split("-").map(Number);
+  const hoje = new Date();
+  let ly = hoje.getFullYear() + 2, lm = hoje.getMonth()+1; // vai até 2 ANOS à frente do mês atual
+  const arr=[];
+  let y=ay, m=am;
+  while(y<ly || (y===ly && m<=lm)){
+    const key=`${y}-${String(m).padStart(2,"0")}`;
+    arr.push({ label:`${MESES_NOMES_FULL[m-1]} ${y}`, mes:key, fechado:FECHADOS.includes(key) });
+    m++; if(m>12){ m=1; y++; }
+  }
+  return arr;
+}
+const MESES = gerarMeses();
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt     = v => v.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const fmtDate = d => { const[,m,day]=d.split("-"); return `${day}/${m}`; };
@@ -240,16 +254,27 @@ function CollapsibleSection({label,count,valor,color,children}) {
   );
 }
 function MonthPicker({mesAtual,onSelect,onClose}) {
-  const ano=parseInt(mesAtual.slice(0,4));
+  const [anoView,setAnoView]=useState(parseInt(mesAtual.slice(0,4)));
   const disp=MESES.map(m=>m.mes);
+  const anosDisp=[...new Set(disp.map(k=>parseInt(k.slice(0,4))))];
+  const podeAnt=anosDisp.includes(anoView-1);
+  const podeProx=anosDisp.includes(anoView+1);
   return (
     <>
       <div style={{position:"fixed",inset:0,zIndex:299}} onClick={onClose}/>
       <div className="month-picker">
-        <div style={{fontSize:15,fontFamily:"'Nunito',sans-serif",fontWeight:800,color:"#1A5276",marginBottom:14,textAlign:"center"}}>{ano}</div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:14,marginBottom:14}}>
+          <button className="arrow-btn" style={{width:26,height:26}} disabled={!podeAnt} onClick={()=>setAnoView(a=>a-1)}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <div style={{fontSize:15,fontFamily:"'Nunito',sans-serif",fontWeight:800,color:"#1A5276"}}>{anoView}</div>
+          <button className="arrow-btn" style={{width:26,height:26}} disabled={!podeProx} onClick={()=>setAnoView(a=>a+1)}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
           {MESES_NOMES.map((nome,i)=>{
-            const key=`${ano}-${padN(i+1)}`;
+            const key=`${anoView}-${padN(i+1)}`;
             const isAct=key===mesAtual;
             const isDis=!disp.includes(key);
             return <button key={key} className={`mc${isAct?" mc-act":""}${isDis?" mc-dis":""}`} disabled={isDis} onClick={()=>{if(!isDis){onSelect(key);onClose();}}}>{nome}</button>;
@@ -398,7 +423,8 @@ const INIT_RECEITAS={
   "2026-09":[],
 };
 export default function App() {
-  const [mesIdx,setMesIdx]                 = useState(2);
+  const idxHoje = MESES.findIndex(m => m.mes === new Date().toISOString().slice(0,7));
+  const [mesIdx,setMesIdx]                 = useState(idxHoje >= 0 ? idxHoje : MESES.length - 1);
   const [allItems,setAllItems]             = useState(INIT_STATE);
   const [allReceitas,setAllReceitas]       = useState(INIT_RECEITAS);
   const [loading,setLoading]               = useState(true);
