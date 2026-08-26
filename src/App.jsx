@@ -46,10 +46,16 @@ async function rcDelete(id) {
     return r.ok;
   } catch { return false; }
 }
+async function fetchCategorias() {
+  try {
+    const r = await fetch(`${SUPA_URL}/rest/v1/categorias?cliente_id=eq.${CID}&order=nome.asc`, { headers: H });
+    return r.ok ? r.json() : [];
+  } catch { return []; }
+}
 const uid = () => (crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now());
 
 
-const CATEGORIAS = [
+let CATEGORIAS = [
   "Administrativo",
   "Alimentação",
   "Compromissos Financeiros",
@@ -429,6 +435,7 @@ export default function App() {
   const [allReceitas,setAllReceitas]       = useState(INIT_RECEITAS);
   const [loading,setLoading]               = useState(true);
   const [lastSync,setLastSync]             = useState(null);
+  const [,forceCatUpdate]                  = useState(0);
   const [view,setView]                     = useState("inicio");
   const [showPicker,setShowPicker]         = useState(false);
   const [showPend,setShowPend]             = useState(false);
@@ -466,6 +473,17 @@ export default function App() {
   }, [mesAtual.mes, mesAnt]);
 
   useEffect(() => { load(); }, [load]);
+  // Busca categorias administráveis do painel do mentor; se falhar ou vier vazio,
+  // mantém a lista fixa (CATEGORIAS/CAT_CORES já declaradas acima) como fallback.
+  useEffect(() => {
+    fetchCategorias().then(res => {
+      if (res && res.length > 0) {
+        CATEGORIAS = res.map(r => r.nome);
+        res.forEach(r => { CAT_CORES[r.nome] = r.cor; });
+        forceCatUpdate(v => v + 1);
+      }
+    });
+  }, []);
   useEffect(() => {
     if (showForm || showFormReceita || editItem || delItem || delReceita || showPend) return;
     const t = setInterval(() => load(true), 5000);
